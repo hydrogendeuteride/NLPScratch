@@ -39,14 +39,20 @@ epochs = 1
 unsup.learn_sentences(epochs, processed_data)
 unsup.save_results()
 
+u_trans_prob = unsup.trans_prob
+u_emit_prob = unsup.emit_prob
+
 sup = supervised()
 sup.load_probabilities('HMM_addingone_model.dat')
 
+s_trans_prob = sup.transition_probs
+s_emit_prob = sup.emission_probs
+
 gamma1 = 0.5
-q_trans_unsup = unsup.trans_prob
-q_trans_viterbi = np.random.rand(5, 5)
-q_emit_unsup = unsup.emit_prob
-q_emit_viterbi = np.random.rand(5, 5)
+q_trans_unsup = u_trans_prob
+q_trans_viterbi = s_trans_prob
+q_emit_unsup = u_emit_prob
+q_emit_viterbi = s_emit_prob
 
 distances = compute_all_distances(q_trans_unsup, q_trans_viterbi, q_emit_unsup, q_emit_viterbi, gamma1)
 print("Distances between states:")
