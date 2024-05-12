@@ -62,8 +62,6 @@ class HMMUnsupervised:
         while True:
             alpha = self.forward(obs_seq)
             beta = self.backward(obs_seq)
-            print(self.trans_prob)
-            print(self.emit_prob)
 
             xi = np.full((len(obs_seq) - 1, self.num_states, self.num_states), \
                           -1e8)
@@ -83,7 +81,7 @@ class HMMUnsupervised:
                 self.state_frequencies[state] += 1
 
             new_trans_prob = logsumexp(xi, axis=0) - logsumexp(gamma[:-1], axis=0)
-            new_emit_prob = np.full_like(self.emit_prob, -1e8)
+            new_emit_prob = np.full_like(self.emit_prob, -1e-8)
             for i in range(self.num_states):
                 denom = logsumexp(gamma[:, i])
                 for o in range(self.emit_prob.shape[1]):
@@ -105,8 +103,8 @@ class HMMUnsupervised:
     def learn_sentences(self, epoch, processed_data):
         for epoch in range(epoch):
             for sequence in processed_data:
-                print(sequence)
-                self.forward_backward(sequence)
+                iter = self.forward_backward(sequence)
+                print(sequence, ', ', iter)
             print(f"Epoch {epoch+1} completed.")
 
     def save_results(self, filename='model_results.txt'):
@@ -138,35 +136,35 @@ class HMMUnsupervised:
         for entry in obs_hidden_prob_line.split('), ('):
             pair, prob = entry.split(': ')
             obs, hidden = map(int, pair.split(', '))
-            instance.emit_prob[hidden, obs] = float(prob)
+            instance.emit_prob[hidden, obs] = np.log(float(prob))
 
         hidden_hidden_prob_line = lines[2].strip('{}()\n')
         for entry in hidden_hidden_prob_line.split('), ('):
             pair, prob = entry.split(': ')
             current, next = map(int, pair.split(', '))
-            instance.trans_prob[current, next] = float(prob)
+            instance.trans_prob[current, next] = np.log(float(prob))
 
         return instance
 
-def read_file_to_list(filename):
+def read_file_to_list(filename, max_lines=None, train_ratio=0.7, dev_ratio=0.15, test_ratio=0.15):
     with open(filename, 'r', encoding='utf-8') as file:
-        lines = file.readlines()
-        
-        lines = [line.strip() for line in lines]
+        if max_lines:
+            lines = [next(file).strip() for _ in range(max_lines)]
+        else:
+            lines = [line.strip() for line in file]
+    
     return lines
 
-data = [
-    "word1::123 Hello world is a test",
-    "word2::123 This is a test",
-    "word3::123 This is Another example"
-]
+data = read_file_to_list('raw_train.txt', 1000)
 
-num_states = 5
+num_states = 50
 hmm = HMMUnsupervised(num_states)
 
 processed_data = hmm.reader(data)
 
 epochs = 1
 hmm.learn_sentences(epochs, processed_data)
+
+print(hmm.trans_prob)
 
 hmm.save_results()
