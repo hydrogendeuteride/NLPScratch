@@ -21,9 +21,10 @@ class HMMUnsupervised:
         processed_data = []
         for line in data:
             line = re.sub(r"^\S+::\d+\s+", "", line)
-            words = custom_split(line)
+            words = line.split()
             word_indices = []
-            for word in words:
+            for tagged_word in words:
+                word = tagged_word.rsplit('/', 1)[0]
                 if word not in self.vocab:
                     self.vocab[word] = len(self.vocab)
                 word_indices.append(self.vocab[word])
@@ -108,17 +109,19 @@ class HMMUnsupervised:
             print(f"Epoch {epoch+1} completed.")
 
     def save_results(self, filename='model_results.txt'):
-        with open(filename, 'w') as file:
+        with open(filename, 'w', encoding='utf-8') as file:
             state_freq_str = ', '.join(f"{i}: {int(freq)}" for i, freq in enumerate(self.state_frequencies))
             file.write(f"{{{state_freq_str}}}\n")
         
-            obs_hidden_prob = {(obs, hidden): np.exp(prob) for hidden in range(self.num_states) for obs, prob in enumerate(self.emit_prob[hidden])}
-            obs_hidden_str = ', '.join(f"({k[0]}, {k[1]}): {v:.4f}" for k, v in obs_hidden_prob.items())
-            file.write(f"{{{obs_hidden_str}}}\n")
-            
             hidden_hidden_prob = {(current, next): np.exp(prob) for current in range(self.num_states) for next, prob in enumerate(self.trans_prob[current])}
             hidden_hidden_str = ', '.join(f"({k[0]}, {k[1]}): {v:.4f}" for k, v in hidden_hidden_prob.items())
             file.write(f"{{{hidden_hidden_str}}}\n")
+
+            index_to_word = {index: word for word, index in self.vocab.items()}
+
+            obs_hidden_prob = {(index_to_word[obs], hidden): np.exp(prob) for hidden in range(self.num_states) for obs, prob in enumerate(self.emit_prob[hidden])}
+            obs_hidden_str = ', '.join(f"({k[0]}, {k[1]}): {v:.4f}" for k, v in obs_hidden_prob.items())
+            file.write(f"{{{obs_hidden_str}}}\n")
 
     def load_from_file(cls, filename):
         with open(filename, 'r') as file:
@@ -131,18 +134,18 @@ class HMMUnsupervised:
         instance = cls(num_states)
         instance.state_frequencies = np.array(state_frequencies)
 
+        hidden_hidden_prob_line = lines[2].strip('{}()\n')
+        for entry in hidden_hidden_prob_line.split('), ('):
+            pair, prob = entry.split(': ')
+            current, next = map(int, pair.split(', '))
+            instance.trans_prob[current, next] = np.log(float(prob))
+
         obs_hidden_prob_line = lines[1].strip('{}()\n')
         instance.emit_prob = np.full((num_states, num_states), -np.inf) 
         for entry in obs_hidden_prob_line.split('), ('):
             pair, prob = entry.split(': ')
             obs, hidden = map(int, pair.split(', '))
             instance.emit_prob[hidden, obs] = np.log(float(prob))
-
-        hidden_hidden_prob_line = lines[2].strip('{}()\n')
-        for entry in hidden_hidden_prob_line.split('), ('):
-            pair, prob = entry.split(': ')
-            current, next = map(int, pair.split(', '))
-            instance.trans_prob[current, next] = np.log(float(prob))
 
         return instance
 
@@ -155,9 +158,9 @@ def read_file_to_list(filename, max_lines=None, train_ratio=0.7, dev_ratio=0.15,
     
     return lines
 
-data = read_file_to_list('raw_train.txt', 1000)
+data = read_file_to_list('tagged_train.txt', 1000)
 
-num_states = 50
+num_states = 10
 hmm = HMMUnsupervised(num_states)
 
 processed_data = hmm.reader(data)
