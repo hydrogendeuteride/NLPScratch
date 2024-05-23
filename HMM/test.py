@@ -1,4 +1,4 @@
-from hmm import HMMSupervised
+from HMM.hmm import HMMSupervised
 
 def evaluate_accuracy(model, test_file):
     correct_tags = 0

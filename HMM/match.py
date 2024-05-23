@@ -1,6 +1,6 @@
 import numpy as np
 
-from hmm import HMMSupervised as supervised
+from HMM.hmm import HMMSupervised as supervised
 from unsupervised import HMMUnsupervised as unsupervised
 from unsupervised import read_file_to_list
 
