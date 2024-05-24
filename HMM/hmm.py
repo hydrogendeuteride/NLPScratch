@@ -4,9 +4,11 @@ import ast
 from collections import Counter
 import math
 
+
 def custom_split(sentence):
     tokens = re.findall(r'\w+|[,.!?;"]', sentence)
     return tokens
+
 
 def replace_quotes(sentence):
     inside_quote = False
@@ -19,6 +21,7 @@ def replace_quotes(sentence):
                 sentence[i] = "``"
                 inside_quote = True
     return sentence
+
 
 class HMMSupervised:
     def __init__(self) -> None:
@@ -39,7 +42,7 @@ class HMMSupervised:
             processed_data.append([self.START] + words_with_tags + [self.STOP])
         return processed_data
 
-    def count(self, data, save = False):
+    def count(self, data, save=False):
         for sentence in data:
             previous_tag = self.START
 
@@ -65,22 +68,22 @@ class HMMSupervised:
             self.word_tag_counts = dict(ast.literal_eval(f.readline().strip()))
             self.tag_pair_counts = dict(ast.literal_eval(f.readline().strip()))
 
-    def calculate_probabilities(self, save = True):
+    def calculate_probabilities(self, save=True):
         unique_tags = len(self.tag_counts)
         unique_words = len(set(word for _, word in self.word_tag_counts.keys()))
 
         self.transition_probs = {k: (v + 1) / (self.tag_counts[k[0]] + unique_tags)
-                            for k, v in self.tag_pair_counts.items()}
+                                 for k, v in self.tag_pair_counts.items()}
 
         self.emission_probs = {k: (v + 1) / (self.tag_counts[k[0]] + unique_words)
-                          for k, v in self.word_tag_counts.items()}
-       
+                               for k, v in self.word_tag_counts.items()}
+
         if (save):
             with open('HMM_addingone_model.dat', 'w', encoding='utf-8') as f:
                 f.write(str(dict(self.tag_counts)) + "\n")
                 f.write(str(self.transition_probs) + "\n")
                 f.write(str(self.emission_probs) + "\n")
-    
+
     def load_probabilities(self, filepath):
         with open(filepath, 'r', encoding='utf-8') as f:
             self.tag_counts = dict(ast.literal_eval(f.readline().strip()))
@@ -94,7 +97,8 @@ class HMMSupervised:
         START, STOP = '<START>', '<STOP>'
 
         for tag in self.tag_counts:
-            V[0][tag] = math.log(self.transition_probs.get((START, tag), 1e-10)) + math.log(self.emission_probs.get((tag, sentence[0]), 1e-10))
+            V[0][tag] = math.log(self.transition_probs.get((START, tag), 1e-10)) + math.log(
+                self.emission_probs.get((tag, sentence[0]), 1e-10))
             path[tag] = [tag]
 
         for t in range(1, len(sentence)):
@@ -102,22 +106,22 @@ class HMMSupervised:
             newpath = {}
 
             for tag in self.tag_counts:
-                (log_prob, state) = max((V[t - 1][prev] + math.log(self.transition_probs.get((prev, tag), 1e-10)) + 
+                (log_prob, state) = max((V[t - 1][prev] + math.log(self.transition_probs.get((prev, tag), 1e-10)) +
                                          math.log(self.emission_probs.get((tag, sentence[t]), 1e-10)), prev)
-                                         for prev in self.tag_counts)
-            
+                                        for prev in self.tag_counts)
+
                 V[t][tag] = log_prob
                 newpath[tag] = path[state] + [tag]
 
             path = newpath
 
-        (log_prob, state) = max((V[len(sentence)-1][tag] + 
-                                 math.log(self.transition_probs.get((tag, STOP), 1e-10)), tag) 
-                                 for tag in self.tag_counts)
-    
+        (log_prob, state) = max((V[len(sentence) - 1][tag] +
+                                 math.log(self.transition_probs.get((tag, STOP), 1e-10)), tag)
+                                for tag in self.tag_counts)
+
         return path[state]
 
-    def viterbi_tagger_test(self, model_path, input_file = None, output_file = None):
+    def viterbi_tagger_test(self, model_path, input_file=None, output_file=None):
         self.load_probabilities(model_path)
 
         if input_file and output_file:
@@ -126,7 +130,8 @@ class HMMSupervised:
             results = [self.viterbi(replace_quotes(custom_split(sentence))) for sentence in sentences]
             with open(output_file, 'w', encoding='utf-8') as file:
                 for sentence, tags in zip(sentences, results):
-                    formatted_sentence = ' '.join(f"{word}/{tag}" for word, tag in zip(replace_quotes(custom_split(sentence)), tags))
+                    formatted_sentence = ' '.join(
+                        f"{word}/{tag}" for word, tag in zip(replace_quotes(custom_split(sentence)), tags))
                     file.write(f"{formatted_sentence.rstrip()}\n")
 
         else:
@@ -139,15 +144,18 @@ class HMMSupervised:
                 sentences.append(sentence)
             results = [self.viterbi(replace_quotes(custom_split(sentence))) for sentence in sentences]
             for sentence, tags in zip(sentences, results):
-                formatted_sentence = ' '.join(f"{word}/{tag}" for word, tag in zip(replace_quotes(custom_split(sentence)), tags))
+                formatted_sentence = ' '.join(
+                    f"{word}/{tag}" for word, tag in zip(replace_quotes(custom_split(sentence)), tags))
                 print(f"{formatted_sentence}\n")
+
 
 def read_file_to_list(filename):
     with open(filename, 'r', encoding='utf-8') as file:
         lines = file.readlines()
-        
+
         lines = [line.strip() for line in lines]
     return lines
+
 
 # EXAMPLE:
 
@@ -170,6 +178,7 @@ def main():
 
     HMM = HMMSupervised()
     HMM.viterbi_tagger_test(args.model_file, args.input_file, args.output_file)
+
 
 if __name__ == "__main__":
     main()
