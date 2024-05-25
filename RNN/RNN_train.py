@@ -1,23 +1,25 @@
 from function import *
-import re
 import pathlib
-
+import pickle
 
 temp = pathlib.PosixPath
 pathlib.PosixPath = pathlib.WindowsPath
 
+
 class RNN:
-    def __init__(self, word_dim, tag_dim, hidden_dim=100, bptt_truncate=4):
+    def __init__(self, word_dim, tag_dim, hidden_dim=100, bptt_truncate=4, params_path=None):
         self.word_dim = word_dim
         self.hidden_dim = hidden_dim
         self.tag_dim = tag_dim
         self.bptt_truncate = bptt_truncate
 
-        self.E = np.random.uniform(-np.sqrt(1. / word_dim), np.sqrt(1. / word_dim), (word_dim, word_dim))
-
-        self.U = np.random.uniform(-np.sqrt(1. / word_dim), np.sqrt(1. / word_dim), (hidden_dim, word_dim))
-        self.V = np.random.uniform(-np.sqrt(1. / hidden_dim), np.sqrt(1. / hidden_dim), (tag_dim, hidden_dim))
-        self.W = np.random.uniform(-np.sqrt(1. / hidden_dim), np.sqrt(1. / hidden_dim), (hidden_dim, hidden_dim))
+        if params_path:
+            self.load(params_path)
+        else:
+            self.E = np.random.uniform(-np.sqrt(1. / word_dim), np.sqrt(1. / word_dim), (word_dim, word_dim))
+            self.U = np.random.uniform(-np.sqrt(1. / word_dim), np.sqrt(1. / word_dim), (hidden_dim, word_dim))
+            self.V = np.random.uniform(-np.sqrt(1. / hidden_dim), np.sqrt(1. / hidden_dim), (tag_dim, hidden_dim))
+            self.W = np.random.uniform(-np.sqrt(1. / hidden_dim), np.sqrt(1. / hidden_dim), (hidden_dim, hidden_dim))
 
     def forward(self, x):
         T = len(x)
@@ -80,3 +82,21 @@ class RNN:
         self.V -= learning_rate * dLdV
         self.W -= learning_rate * dLdW
         self.E -= learning_rate * dLdE
+
+    def save(self, file_path):
+        parameters = {
+            'E': self.E,
+            'U': self.U,
+            'V': self.V,
+            'W': self.W
+        }
+        with open(file_path, 'wb') as f:
+            pickle.dump(parameters, f)
+
+    def load(self, file_path):
+        with open(file_path, 'rb') as f:
+            parameters = pickle.load(f)
+        self.E = parameters['E']
+        self.U = parameters['U']
+        self.V = parameters['V']
+        self.W = parameters['W']

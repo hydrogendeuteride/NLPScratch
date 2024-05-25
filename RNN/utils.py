@@ -70,3 +70,13 @@ def text_to_indices(processed_data, word_to_index, tag_to_index):
         Y.append(sentence_Y)
 
     return X, Y
+
+
+def build_reverse_tag_index(tag_to_index):
+    index_to_tag = {index: tag for tag, index in tag_to_index.items()}
+    return index_to_tag
+
+
+def indices_to_tags(indices, index_to_tag):
+    tags = [index_to_tag[index] for index in indices]
+    return tags
