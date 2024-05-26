@@ -19,3 +19,9 @@ def softmax(x):
         x_exp = np.exp(x)
         x_sum = np.sum(x_exp)
         return x_exp / x_sum
+
+
+def sigmoid(x):
+    np = cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy
+
+    return 1.0 / (1.0 + np.exp(-x))
