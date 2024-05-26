@@ -9,14 +9,13 @@ pathlib.PosixPath = pathlib.WindowsPath
 
 
 class LSTM:
-    def __init__(self, word_dim, tag_dim, hidden_dim=100, bptt_truncate=4, params_path=None, use_gpu=False):
+    def __init__(self, word_dim, tag_dim, hidden_dim=100, params_path=None, use_gpu=False):
         self.use_gpu = use_gpu and (default_library == 'cupy')
         self.np = cupy if self.use_gpu else numpy
 
         self.word_dim = word_dim
         self.hidden_dim = hidden_dim
         self.tag_dim = tag_dim
-        self.bptt_truncate = bptt_truncate
 
         if params_path:
             self.load(params_path)
@@ -140,10 +139,12 @@ class LSTM:
 
     def save(self, file_path):
         parameters = {
+            'Wf': self.Wf.get() if self.use_gpu else self.Wf,
+            'Wi': self.Wi.get() if self.use_gpu else self.Wi,
+            'Wo': self.Wo.get() if self.use_gpu else self.Wo,
+            'Wc': self.Wc.get() if self.use_gpu else self.Wc,
             'E': self.E.get() if self.use_gpu else self.E,
-            'U': self.U.get() if self.use_gpu else self.U,
-            'V': self.V.get() if self.use_gpu else self.V,
-            'W': self.W.get() if self.use_gpu else self.W
+            'V': self.V.get() if self.use_gpu else self.V
         }
         with open(file_path, 'wb') as f:
             pickle.dump(parameters, f)
@@ -151,7 +152,9 @@ class LSTM:
     def load(self, file_path):
         with open(file_path, 'rb') as f:
             parameters = pickle.load(f)
+        self.Wf = self.np.array(parameters['Wf'])
+        self.Wi = self.np.array(parameters['Wi'])
+        self.Wo = self.np.array(parameters['Wo'])
+        self.Wc = self.np.array(parameters['Wc'])
         self.E = self.np.array(parameters['E'])
-        self.U = self.np.array(parameters['U'])
         self.V = self.np.array(parameters['V'])
-        self.W = self.np.array(parameters['W'])
