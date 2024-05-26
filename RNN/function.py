@@ -1,7 +1,14 @@
-import numpy as np
+import numpy
+try:
+    import cupy
+    default_library = 'cupy'
+except ImportError:
+    default_library = 'numpy'
 
 
 def softmax(x):
+    np = cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy
+
     if x.ndim == 2:
         x = x - np.max(x, axis=1, keepdims=True)
         x_exp = np.exp(x)
