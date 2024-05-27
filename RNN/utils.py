@@ -42,6 +42,7 @@ def count_word_POS(processed_data):
             else:
                 word_count[word] = 1
 
+    word_count['<UNKNOWN>'] = 0
     return pos_count, word_count
 
 
@@ -60,7 +61,7 @@ def text_to_indices(processed_data, word_to_index, tag_to_index):
         sentence_Y = []
 
         for word, tag in sentence:
-            word_idx = word_to_index.get(word, word_to_index.get('<UNKNOWN>'))  # Fallback to '<UNKNOWN>'
+            word_idx = word_to_index.get(word, word_to_index.get('<UNKNOWN>'))
             tag_idx = tag_to_index[tag]
 
             sentence_X.append(word_idx)
@@ -78,5 +79,5 @@ def build_reverse_tag_index(tag_to_index):
 
 
 def indices_to_tags(indices, index_to_tag):
-    tags = [index_to_tag[index] for index in indices]
+    tags = [index_to_tag.get(index, '<UNK>') for index in indices]
     return tags

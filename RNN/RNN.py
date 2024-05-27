@@ -19,10 +19,14 @@ class RNN:
         if params_path:
             self.load(params_path)
         else:
-            self.E = self.np.random.uniform(-self.np.sqrt(1. / word_dim), self.np.sqrt(1. / word_dim), (word_dim, word_dim))
-            self.U = self.np.random.uniform(-self.np.sqrt(1. / word_dim), self.np.sqrt(1. / word_dim), (hidden_dim, word_dim))
-            self.V = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim), (tag_dim, hidden_dim))
-            self.W = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim), (hidden_dim, hidden_dim))
+            self.E = self.np.random.uniform(-self.np.sqrt(1. / word_dim), self.np.sqrt(1. / word_dim),
+                                            (word_dim, word_dim))
+            self.U = self.np.random.uniform(-self.np.sqrt(1. / word_dim), self.np.sqrt(1. / word_dim),
+                                            (hidden_dim, word_dim))
+            self.V = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim),
+                                            (tag_dim, hidden_dim))
+            self.W = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim),
+                                            (hidden_dim, hidden_dim))
 
     def forward(self, x):
         T = len(x)

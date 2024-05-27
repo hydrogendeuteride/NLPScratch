@@ -4,11 +4,12 @@ from utils import *
 import argparse
 
 
-def rnn_tagger_test(model, input_file=None, output_file=None):
+def rnn_tagger_test(model, idx_to_tag, input_file=None, output_file=None):
     if input_file and output_file:
         with open(input_file, 'r', encoding='utf-8') as file:
             sentences = file.read().strip().split('\n')
-        results = [model.predict(replace_quotes(custom_split(sentence))) for sentence in sentences]
+        results = [indices_to_tags(model.predict(replace_quotes(custom_split(sentence))), idx_to_tag)
+                   for sentence in sentences]
         with open(output_file, 'w', encoding='utf-8') as file:
             for sentence, tags in zip(sentences, results):
                 formatted_sentence = ' '.join(
@@ -23,7 +24,8 @@ def rnn_tagger_test(model, input_file=None, output_file=None):
             if sentence == "":
                 break
             sentences.append(sentence)
-        results = [model.predict(replace_quotes(custom_split(sentence))) for sentence in sentences]
+        results = [indices_to_tags(model.predict(replace_quotes(custom_split(sentence))), idx_to_tag)
+                   for sentence in sentences]
         for sentence, tags in zip(sentences, results):
             formatted_sentence = ' '.join(
                 f"{word}/{tag}" for word, tag in zip(replace_quotes(custom_split(sentence)), tags))
@@ -38,8 +40,8 @@ def main():
 
     args = parser.parse_args()
 
-    data_line = read_file_to_list('../dataset/tagged_train_mini.txt')
-    processed_data_line = reader(data_line)
+    data_line = read_file_to_list('dataset/tagged_train.txt')
+    processed_data_line = reader(data_line[:5000])
     pos_cnt, word_cnt = count_word_POS(processed_data_line)
     word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 
@@ -49,4 +51,8 @@ def main():
     model = RNN(word_dim=len(word_cnt), tag_dim=len(pos_cnt), hidden_dim=100, bptt_truncate=4,
                 params_path=args.model_file)
 
-    rnn_tagger_test(model, input_file=args.input_file, output_file=args.output_file)
+    rnn_tagger_test(model, idx_to_tag, input_file=args.input_file, output_file=args.output_file)
+
+
+if __name__ == '__main__':
+    main()
