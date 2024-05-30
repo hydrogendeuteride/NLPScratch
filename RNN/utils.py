@@ -1,4 +1,5 @@
 import re
+import pickle
 
 
 def read_file_to_list(filename):
@@ -90,3 +91,32 @@ def build_reverse_tag_index(tag_to_index):
 def indices_to_tags(indices, index_to_tag):
     tags = [index_to_tag.get(index, '<UNKNOWN>') for index in indices]
     return tags
+
+
+def save_data(vocab, file_path):
+    with open(file_path, 'wb') as f:
+        pickle.dump(vocab, f)
+
+
+def load_data(file_path):
+    with open(file_path, 'rb') as f:
+        return pickle.load(f)
+
+
+def create_and_save_vocab(data_file, vocab_file, line_num):
+    data_line = read_file_to_list(data_file)
+    processed_data_line = reader(data_line[:line_num])
+    pos_cnt, word_cnt = count_word_POS(processed_data_line)
+
+    word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
+    idx_to_tag = build_reverse_tag_index(tag_to_idx)
+
+    data_to_save = {
+        'word_to_idx': word_to_idx,
+        'tag_to_idx': tag_to_idx,
+        'idx_to_tag': idx_to_tag,
+        'word_count': len(word_cnt),
+        'pos_count': len(pos_cnt)
+    }
+
+    save_data(data_to_save, vocab_file)

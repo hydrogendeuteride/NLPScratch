@@ -77,7 +77,7 @@ class LSTM:
 
     def backward(self, x, y):
         T = len(x)
-        o, s, c= self.forward(x)
+        o, s, c = self.forward(x)
 
         dLdWf = self.np.zeros(self.Wf.shape)
         dLdWi = self.np.zeros(self.Wi.shape)

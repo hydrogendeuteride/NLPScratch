@@ -4,15 +4,14 @@ from utils import *
 import argparse
 
 
-def rnn_tagger_test(model, idx_to_tag, word_to_idx, tag_to_idx, input_file=None, output_file=None):
+def rnn_tagger_test(model, idx_to_tag, word_to_idx, input_file=None, output_file=None):
     if input_file and output_file:
         with open(input_file, 'r', encoding='utf-8') as file:
             sentences = file.read().strip().split('\n')
-        results = [indices_to_tags(model.predict(replace_quotes(custom_split(sentence))), idx_to_tag)
-                   for sentence in sentences]
+        results = []
         for sentence in sentences:
             processed_sentence = replace_quotes(custom_split(sentence))
-            word_idx, tag_idx = line_to_indices(processed_sentence, word_to_idx, tag_to_idx)
+            word_idx = line_to_indices(processed_sentence, word_to_idx)
             results.append(indices_to_tags(model.predict(word_idx), idx_to_tag))
 
         with open(output_file, 'w', encoding='utf-8') as file:
@@ -33,7 +32,6 @@ def rnn_tagger_test(model, idx_to_tag, word_to_idx, tag_to_idx, input_file=None,
         for sentence in sentences:
             processed_sentence = replace_quotes(custom_split(sentence))
             word_idx = line_to_indices(processed_sentence, word_to_idx)
-            print(word_idx)
             results.append(indices_to_tags(model.predict(word_idx), idx_to_tag))
 
         for sentence, tags in zip(sentences, results):
@@ -50,18 +48,25 @@ def main():
 
     args = parser.parse_args()
 
-    data_line = read_file_to_list('dataset/tagged_train.txt')
-    processed_data_line = reader(data_line[:5000])
-    pos_cnt, word_cnt = count_word_POS(processed_data_line)
-    word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
+    # data_line = read_file_to_list('dataset/tagged_train.txt')
+    # processed_data_line = reader(data_line[:100])
+    # pos_cnt, word_cnt = count_word_POS(processed_data_line)
+    # word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
+    #
+    # idx_to_tag = build_reverse_tag_index(tag_to_idx)
 
-    idx_to_tag = build_reverse_tag_index(tag_to_idx)
+    loaded_data = load_data('../weight/vocab_data.pkl')
 
-    model = RNN(word_dim=len(word_cnt), tag_dim=len(pos_cnt), hidden_dim=100, bptt_truncate=4,
+    word_to_idx = loaded_data['word_to_idx']
+    tag_to_idx = loaded_data['tag_to_idx']
+    idx_to_tag = loaded_data['idx_to_tag']
+    word_count = loaded_data['word_count']
+    pos_count = loaded_data['pos_count']
+
+    model = RNN(word_dim=word_count, tag_dim=pos_count, hidden_dim=100, bptt_truncate=4,
                 params_path=args.model_file)
 
-    rnn_tagger_test(model, idx_to_tag, word_to_idx, tag_to_idx, input_file=args.input_file,
-                    output_file=args.output_file)
+    rnn_tagger_test(model, idx_to_tag, word_to_idx, tag_to_idx, output_file=args.output_file)
 
 
 if __name__ == '__main__':
