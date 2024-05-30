@@ -73,11 +73,20 @@ def text_to_indices(processed_data, word_to_index, tag_to_index):
     return X, Y
 
 
+def line_to_indices(sentence, word_to_index):
+    sentence_x = []
+    for word in sentence:
+        word_idx = word_to_index.get(word, word_to_index.get('<UNKNOWN>'))
+        sentence_x.append(word_idx)
+
+    return sentence_x
+
+
 def build_reverse_tag_index(tag_to_index):
     index_to_tag = {index: tag for tag, index in tag_to_index.items()}
     return index_to_tag
 
 
 def indices_to_tags(indices, index_to_tag):
-    tags = [index_to_tag.get(index, '<UNK>') for index in indices]
+    tags = [index_to_tag.get(index, '<UNKNOWN>') for index in indices]
     return tags
