@@ -12,7 +12,7 @@ except ImportError:
     array_library = np
 
 data_line = read_file_to_list('../dataset/tagged_train.txt')
-processed_data_line = reader(data_line[:100])
+processed_data_line = reader(data_line[:5000])
 pos_cnt, word_cnt = count_word_POS(processed_data_line)
 word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 

@@ -9,9 +9,10 @@ def evaluate_rnn_accuracy(model, idx_to_tag, word_to_idx, test_file):
     test_data = reader(read_file_to_list(test_file))
 
     for sentence in test_data:
-        tokens = [token.rsplit('/')[0] for token in sentence[1:-1]]
-        true_tags = [token.rsplit('/')[1] for token in sentence[1:-1]]
+        tokens = [token[0] for token in sentence]
+        true_tags = [token[1] for token in sentence]
         word_indices = line_to_indices(tokens, word_to_idx)
+        print(word_indices)
         predicted_indices = model.predict(word_indices)
         predicted_tags = indices_to_tags(predicted_indices, idx_to_tag)
         print(true_tags)
@@ -31,3 +32,9 @@ tag_to_idx = loaded_data['tag_to_idx']
 idx_to_tag = loaded_data['idx_to_tag']
 word_count = loaded_data['word_count']
 pos_count = loaded_data['pos_count']
+
+model = RNN(word_dim=word_count, tag_dim=pos_count, hidden_dim=100, bptt_truncate=4,
+            params_path='../weight/test.pkl')
+
+acc = evaluate_rnn_accuracy(model, idx_to_tag, word_to_idx, test_file='../dataset/tagged_test.txt')
+print(acc)
