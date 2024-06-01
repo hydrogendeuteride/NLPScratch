@@ -25,3 +25,16 @@ def sigmoid(x):
     np = cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy
 
     return 1.0 / (1.0 + np.exp(-x))
+
+
+def clip_grads(gradients, max_norm):
+    np = cupy.get_array_module(gradients) if 'cupy' in str(type(gradients)) else numpy
+
+    total_norm = 0
+    for grad in gradients:
+        total_norm += np.sum(np.square(grad))
+    total_norm = np.sqrt(total_norm)
+
+    if total_norm + 1e-6 > max_norm:
+        for i in range(len(gradients)):
+            gradients[i] *= max_norm / total_norm
