@@ -9,13 +9,14 @@ pathlib.PosixPath = pathlib.WindowsPath
 
 
 class LSTM:
-    def __init__(self, word_dim, tag_dim, hidden_dim=100, params_path=None, use_gpu=False):
+    def __init__(self, word_dim, tag_dim, hidden_dim=100, params_path=None, bptt_truncate = 4, use_gpu=False):
         self.use_gpu = use_gpu and (default_library == 'cupy')
         self.np = cupy if self.use_gpu else numpy
 
         self.word_dim = word_dim
         self.hidden_dim = hidden_dim
         self.tag_dim = tag_dim
+        self.bptt_truncate = bptt_truncate
 
         if params_path:
             self.load(params_path)
@@ -27,11 +28,12 @@ class LSTM:
             self.Wi = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim),
                                              (hidden_dim, hidden_dim + word_dim))
             self.Wo = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim),
-                                            (hidden_dim, hidden_dim + word_dim))
+                                             (hidden_dim, hidden_dim + word_dim))
             self.Wc = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim),
                                              (hidden_dim, hidden_dim + word_dim))
 
-            self.V = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim), (tag_dim, hidden_dim))
+            self.V = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim),
+                                            (tag_dim, hidden_dim))
 
     def forward(self, x):
         T = len(x)
@@ -46,14 +48,14 @@ class LSTM:
 
         for t in range(T):
             x_t = self.E[:, x[t]]
-            z = self.np.concatenate([s[t-1], x_t])
+            z = self.np.concatenate([s[t - 1], x_t])
             f = sigmoid(self.np.dot(self.Wf, z))
             i = sigmoid(self.np.dot(self.Wi, z))
             o_ = sigmoid(self.np.dot(self.Wo, z))
             c_tilde = self.np.tanh(self.np.dot(self.Wc, z))
 
             c[t] = f * c[t - 1] + i * c_tilde
-            s[t] = o_ * np.tanh(c[t])
+            s[t] = o_ * self.np.tanh(c[t])
             o[t] = softmax(np.dot(self.V, s[t]))
 
         return [o, s, c]
@@ -86,29 +88,31 @@ class LSTM:
         dLdV = self.np.zeros(self.V.shape)
         dLdE = self.np.zeros(self.E.shape)
 
-        delta_o = o
+        delta_o = o                     # output vector grad
         delta_o[range(len(y)), y] -= 1
 
-        delta_c = self.np.zeros(c[0].shape)
+        delta_c = self.np.zeros(c[0].shape)     # memory cell grad
 
         for t in range(T)[::-1]:
             dLdV += self.np.outer(delta_o[t], s[t].T)
 
             z = self.np.concatenate([s[t - 1], self.E[:, x[t]]])
 
-            delta_s = (self.np.dot(self.V.T, delta_o[t]) * (1 - self.np.tanh(c[t]) ** 2) *
-                       sigmoid(self.np.dot(self.Wo, delta_o[t]) * z))
-            delta_o_ = delta_s * self.np.tanh(c[t])
+            delta_o_ = self.np.dot(self.V.T, delta_o[t]) * sigmoid(self.np.dot(self.Wo, z)) * \
+                       (1 - sigmoid(self.np.dot(self.Wo, z)))   # output gate grad
+
+            delta_s = (self.np.dot(self.V.T, delta_o[t]) +
+                       self.np.dot(self.Wo.T[:self.hidden_dim, :], delta_o_[:self.hidden_dim]) *
+                       (1 - self.np.tanh(c[t]) ** 2))             # hidden state grad
 
             delta_c += (delta_s * sigmoid(self.np.dot(self.Wo, z)) * (1 - self.np.tanh(c[t]) ** 2))
             delta_c_tilde = delta_c * sigmoid(self.np.dot(self.Wi, z))
 
             delta_f = delta_c * c[t - 1]
             delta_i = delta_c * self.np.tanh(self.np.dot(self.Wc, z))
-
             dLdWf += self.np.outer(delta_f, z)
             dLdWi += self.np.outer(delta_i, z)
-            dLdWo += self.np.outer(delta_c, z)
+            dLdWo += self.np.outer(delta_o_, z)
             dLdWc += self.np.outer(delta_c_tilde, z)
 
             dLdE[:, x[t]] += self.np.dot(self.Wf[:, self.hidden_dim:].T, delta_f)
@@ -116,14 +120,14 @@ class LSTM:
             dLdE[:, x[t]] += self.np.dot(self.Wo[:, self.hidden_dim:].T, delta_o_)
             dLdE[:, x[t]] += self.np.dot(self.Wc[:, self.hidden_dim:].T, delta_c_tilde)
 
-            delta_c = self.np.dot(self.Wf.T, delta_f)[:, :self.hidden_dim] * sigmoid(self.np.dot(self.Wf, z)) * (
-                        1 - sigmoid(self.np.dot(self.Wf, z)))
-            delta_c += self.np.dot(self.Wi.T, delta_i)[:, :self.hidden_dim] * sigmoid(self.np.dot(self.Wi, z)) * (
-                        1 - sigmoid(self.np.dot(self.Wi, z)))
-            delta_c += self.np.dot(self.Wo.T, delta_o_)[:, :self.hidden_dim] * sigmoid(self.np.dot(self.Wo, z)) * (
-                        1 - sigmoid(self.np.dot(self.Wo, z)))
-            delta_c += self.np.dot(self.Wc.T, delta_c_tilde)[:, :self.hidden_dim] * (
-                        1 - self.np.tanh(self.np.dot(self.Wc, z)) ** 2)
+            delta_c = self.np.dot(self.Wf.T, delta_f)[:self.hidden_dim] * sigmoid(self.np.dot(self.Wf, z)) * (
+                    1 - sigmoid(self.np.dot(self.Wf, z)))
+            delta_c += self.np.dot(self.Wi.T, delta_i)[:self.hidden_dim] * sigmoid(self.np.dot(self.Wi, z)) * (
+                    1 - sigmoid(self.np.dot(self.Wi, z)))
+            delta_c += self.np.dot(self.Wo.T, delta_o_)[:self.hidden_dim] * sigmoid(self.np.dot(self.Wo, z)) * (
+                    1 - sigmoid(self.np.dot(self.Wo, z)))
+            delta_c += self.np.dot(self.Wc.T, delta_c_tilde)[:self.hidden_dim] * (
+                    1 - self.np.tanh(self.np.dot(self.Wc, z)) ** 2)
 
         return [dLdWf, dLdWi, dLdWo, dLdWc, dLdV, dLdE]
 

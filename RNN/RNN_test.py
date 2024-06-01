@@ -41,7 +41,7 @@ def rnn_tagger_test(model, idx_to_tag, word_to_idx, input_file=None, output_file
 
 
 def main():
-    parser = argparse.ArgumentParser(description="HMM Batch Tagger")
+    parser = argparse.ArgumentParser(description="RNN Batch Tagger")
     parser.add_argument('model_file', help='Model file path')
     parser.add_argument('--input_file', help='Input file path')
     parser.add_argument('--output_file', help='Output file path')
@@ -66,7 +66,7 @@ def main():
     model = RNN(word_dim=word_count, tag_dim=pos_count, hidden_dim=100, bptt_truncate=4,
                 params_path=args.model_file)
 
-    rnn_tagger_test(model, idx_to_tag, word_to_idx, tag_to_idx, output_file=args.output_file)
+    rnn_tagger_test(model, idx_to_tag, word_to_idx, input_file=args.input_file, output_file=args.output_file)
 
 
 if __name__ == '__main__':

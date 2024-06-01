@@ -12,7 +12,6 @@ def evaluate_rnn_accuracy(model, idx_to_tag, word_to_idx, test_file):
         tokens = [token[0] for token in sentence]
         true_tags = [token[1] for token in sentence]
         word_indices = line_to_indices(tokens, word_to_idx)
-        print(word_indices)
         predicted_indices = model.predict(word_indices)
         predicted_tags = indices_to_tags(predicted_indices, idx_to_tag)
         print(true_tags)
