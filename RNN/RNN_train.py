@@ -39,7 +39,7 @@ else:
     pos_tags = indices_to_tags(tag_i, idx_to_tag)
     print(pos_tags)
 
-model.save('../weight/test.pkl')
+model.save('../weight/test_f32.pkl')
 
 data_to_save = {
         'word_to_idx': word_to_idx,
@@ -49,4 +49,4 @@ data_to_save = {
         'pos_count': len(pos_cnt)
     }
 
-save_data(data_to_save, '../weight/vocab_data.pkl')
+save_data(data_to_save, '../weight/vocab_data_f32.pkl')

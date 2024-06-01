@@ -20,21 +20,21 @@ class RNN:
             self.load(params_path)
         else:
             self.E = self.np.random.uniform(-self.np.sqrt(1. / word_dim), self.np.sqrt(1. / word_dim),
-                                            (word_dim, word_dim))
+                                            (word_dim, word_dim)).astype(self.np.float32)
             self.U = self.np.random.uniform(-self.np.sqrt(1. / word_dim), self.np.sqrt(1. / word_dim),
-                                            (hidden_dim, word_dim))
+                                            (hidden_dim, word_dim)).astype(self.np.float32)
             self.V = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim),
-                                            (tag_dim, hidden_dim))
+                                            (tag_dim, hidden_dim)).astype(self.np.float32)
             self.W = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim),
-                                            (hidden_dim, hidden_dim))
+                                            (hidden_dim, hidden_dim)).astype(self.np.float32)
 
     def forward(self, x):
         T = len(x)
         x = self.np.array(x)
-        s = self.np.zeros((T + 1, self.hidden_dim))
+        s = self.np.zeros((T + 1, self.hidden_dim)).astype(self.np.float32)
         s[-1] = self.np.zeros(self.hidden_dim)
 
-        o = self.np.zeros((T, self.tag_dim))
+        o = self.np.zeros((T, self.tag_dim)).astype(self.np.float32)
 
         for t in self.np.arange(T):
             x_t = self.E[:, x[t]]
@@ -63,10 +63,10 @@ class RNN:
         T = len(x)
         o, s = self.forward(x)
 
-        dLdU = self.np.zeros(self.U.shape)
-        dLdV = self.np.zeros(self.V.shape)
-        dLdW = self.np.zeros(self.W.shape)
-        dLdE = self.np.zeros(self.E.shape)
+        dLdU = self.np.zeros(self.U.shape).astype(self.np.float32)
+        dLdV = self.np.zeros(self.V.shape).astype(self.np.float32)
+        dLdW = self.np.zeros(self.W.shape).astype(self.np.float32)
+        dLdE = self.np.zeros(self.E.shape).astype(self.np.float32)
 
         delta_o = o
         delta_o[range(len(y)), y] -= 1
@@ -103,7 +103,7 @@ class RNN:
     def load(self, file_path):
         with open(file_path, 'rb') as f:
             parameters = pickle.load(f)
-        self.E = self.np.array(parameters['E'])
-        self.U = self.np.array(parameters['U'])
-        self.V = self.np.array(parameters['V'])
-        self.W = self.np.array(parameters['W'])
+        self.E = self.np.array(parameters['E']).astype(self.np.float32)
+        self.U = self.np.array(parameters['U']).astype(self.np.float32)
+        self.V = self.np.array(parameters['V']).astype(self.np.float32)
+        self.W = self.np.array(parameters['W']).astype(self.np.float32)
