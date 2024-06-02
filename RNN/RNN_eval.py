@@ -24,7 +24,7 @@ def evaluate_rnn_accuracy(model, idx_to_tag, word_to_idx, test_file):
     return accuracy
 
 
-loaded_data = load_data('../weight/vocab_data.pkl')
+loaded_data = load_data('../weight/vocab_data_f32.pkl')
 
 word_to_idx = loaded_data['word_to_idx']
 tag_to_idx = loaded_data['tag_to_idx']
@@ -32,8 +32,8 @@ idx_to_tag = loaded_data['idx_to_tag']
 word_count = loaded_data['word_count']
 pos_count = loaded_data['pos_count']
 
-model = RNN(word_dim=word_count, tag_dim=pos_count, hidden_dim=100, bptt_truncate=4,
-            params_path='../weight/test.pkl')
+model = RNN(word_dim=word_count, word_embed_dim=128, tag_dim=pos_count, hidden_dim=128, bptt_truncate=4,
+            params_path='../weight/test_f32.pkl')
 
 acc = evaluate_rnn_accuracy(model, idx_to_tag, word_to_idx, test_file='../dataset/tagged_test.txt')
 print(acc)

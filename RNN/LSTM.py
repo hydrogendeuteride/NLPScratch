@@ -9,12 +9,13 @@ pathlib.PosixPath = pathlib.WindowsPath
 
 
 class LSTM:
-    def __init__(self, word_dim, tag_dim, hidden_dim=100, params_path=None, bptt_truncate=4,
+    def __init__(self, word_dim, word_embed_dim, tag_dim, hidden_dim=100, params_path=None, bptt_truncate=4,
                  max_norm=5, use_gpu=False):
         self.use_gpu = use_gpu and (default_library == 'cupy')
         self.np = cupy if self.use_gpu else numpy
 
         self.word_dim = word_dim
+        self.word_embed_dim = word_embed_dim
         self.hidden_dim = hidden_dim
         self.tag_dim = tag_dim
         self.bptt_truncate = bptt_truncate
@@ -23,16 +24,16 @@ class LSTM:
         if params_path:
             self.load(params_path)
         else:
-            self.E = self.np.random.uniform(-self.np.sqrt(1. / word_dim), self.np.sqrt(1. / word_dim),
-                                            (word_dim, word_dim)).astype(self.np.float32)
+            self.E = self.np.random.uniform(-self.np.sqrt(1. / word_embed_dim), self.np.sqrt(1. / word_embed_dim),
+                                            (word_dim, word_embed_dim)).astype(self.np.float32)
             self.Wf = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim),
-                                             (hidden_dim, hidden_dim + word_dim)).astype(self.np.float32)
+                                             (hidden_dim, hidden_dim + word_embed_dim)).astype(self.np.float32)
             self.Wi = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim),
-                                             (hidden_dim, hidden_dim + word_dim)).astype(self.np.float32)
+                                             (hidden_dim, hidden_dim + word_embed_dim)).astype(self.np.float32)
             self.Wo = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim),
-                                             (hidden_dim, hidden_dim + word_dim)).astype(self.np.float32)
+                                             (hidden_dim, hidden_dim + word_embed_dim)).astype(self.np.float32)
             self.Wc = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim),
-                                             (hidden_dim, hidden_dim + word_dim)).astype(self.np.float32)
+                                             (hidden_dim, hidden_dim + word_embed_dim)).astype(self.np.float32)
 
             self.V = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim),
                                             (tag_dim, hidden_dim)).astype(self.np.float32)
@@ -49,7 +50,7 @@ class LSTM:
         o = self.np.zeros((T, self.tag_dim)).astype(self.np.float32)
 
         for t in range(T):
-            x_t = self.E[:, x[t]]
+            x_t = self.E[x[t]]
             z = self.np.concatenate([s[t - 1], x_t]).astype(self.np.float32)
             f = sigmoid(self.np.dot(self.Wf, z))
             i = sigmoid(self.np.dot(self.Wi, z))
@@ -99,9 +100,9 @@ class LSTM:
             dLdV += self.np.outer(delta_o[t], s[t].T)
 
             if t > 0:
-                z = self.np.concatenate([s[t - 1], self.E[:, x[t]]]).astype(self.np.float32)
+                z = self.np.concatenate([s[t - 1], self.E[x[t]]]).astype(self.np.float32)
             else:
-                z = self.np.concatenate([self.np.zeros(self.hidden_dim), self.E[:, x[t]]]).astype(self.np.float32)
+                z = self.np.concatenate([self.np.zeros(self.hidden_dim), self.E[x[t]]]).astype(self.np.float32)
 
             delta_o_ = self.np.dot(self.V.T, delta_o[t]) * sigmoid(self.np.dot(self.Wo, z)) * \
                        (1 - sigmoid(self.np.dot(self.Wo, z)))  # output gate grad
@@ -120,10 +121,10 @@ class LSTM:
             dLdWo += self.np.outer(delta_o_, z)
             dLdWc += self.np.outer(delta_c_tilde, z)
 
-            dLdE[:, x[t]] += self.np.dot(self.Wf[:, self.hidden_dim:].T, delta_f)
-            dLdE[:, x[t]] += self.np.dot(self.Wi[:, self.hidden_dim:].T, delta_i)
-            dLdE[:, x[t]] += self.np.dot(self.Wo[:, self.hidden_dim:].T, delta_o_)
-            dLdE[:, x[t]] += self.np.dot(self.Wc[:, self.hidden_dim:].T, delta_c_tilde)
+            dLdE[x[t]] += self.np.dot(self.Wf[:, self.hidden_dim:].T, delta_f)
+            dLdE[x[t]] += self.np.dot(self.Wi[:, self.hidden_dim:].T, delta_i)
+            dLdE[x[t]] += self.np.dot(self.Wo[:, self.hidden_dim:].T, delta_o_)
+            dLdE[x[t]] += self.np.dot(self.Wc[:, self.hidden_dim:].T, delta_c_tilde)
 
             if t > max(0, t - self.bptt_truncate):
                 delta_c = self.np.dot(self.Wf.T, delta_f)[:self.hidden_dim] * sigmoid(self.np.dot(self.Wf, z)) * (

@@ -19,7 +19,7 @@ word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 x1, y1 = text_to_indices(processed_data_line, word_to_idx, tag_to_idx)
 idx_to_tag = build_reverse_tag_index(tag_to_idx)
 
-model = RNN(word_dim=len(word_cnt), tag_dim=len(pos_cnt), hidden_dim=100, bptt_truncate=4, use_gpu=True)
+model = RNN(word_dim=len(word_cnt), word_embed_dim=128, tag_dim=len(pos_cnt), hidden_dim=128, bptt_truncate=4, use_gpu=True)
 start_time = time.time()
 model.sgd_step(x1[3], y1[3], 0.005)
 end_time = time.time()

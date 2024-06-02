@@ -63,7 +63,7 @@ def main():
     word_count = loaded_data['word_count']
     pos_count = loaded_data['pos_count']
 
-    model = RNN(word_dim=word_count, tag_dim=pos_count, hidden_dim=100, bptt_truncate=4,
+    model = RNN(word_dim=word_count, word_embed_dim=128, tag_dim=pos_count, hidden_dim=128, bptt_truncate=4,
                 params_path=args.model_file)
 
     rnn_tagger_test(model, idx_to_tag, word_to_idx, input_file=args.input_file, output_file=args.output_file)

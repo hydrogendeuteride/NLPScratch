@@ -7,11 +7,12 @@ pathlib.PosixPath = pathlib.WindowsPath
 
 
 class RNN:
-    def __init__(self, word_dim, tag_dim, hidden_dim=100, bptt_truncate=4, params_path=None, use_gpu=False):
+    def __init__(self, word_dim, word_embed_dim, tag_dim, hidden_dim=100, bptt_truncate=4, params_path=None, use_gpu=False):
         self.use_gpu = use_gpu and (default_library == 'cupy')
         self.np = cupy if self.use_gpu else numpy
 
         self.word_dim = word_dim
+        self.word_embed_dim = word_embed_dim
         self.hidden_dim = hidden_dim
         self.tag_dim = tag_dim
         self.bptt_truncate = bptt_truncate
@@ -19,10 +20,10 @@ class RNN:
         if params_path:
             self.load(params_path)
         else:
-            self.E = self.np.random.uniform(-self.np.sqrt(1. / word_dim), self.np.sqrt(1. / word_dim),
-                                            (word_dim, word_dim)).astype(self.np.float32)
-            self.U = self.np.random.uniform(-self.np.sqrt(1. / word_dim), self.np.sqrt(1. / word_dim),
-                                            (hidden_dim, word_dim)).astype(self.np.float32)
+            self.E = self.np.random.uniform(-self.np.sqrt(1. / word_embed_dim), self.np.sqrt(1. / word_embed_dim),
+                                            (word_dim, word_embed_dim)).astype(self.np.float32)
+            self.U = self.np.random.uniform(-self.np.sqrt(1. / word_embed_dim), self.np.sqrt(1. / word_embed_dim),
+                                            (hidden_dim, word_embed_dim)).astype(self.np.float32)
             self.V = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim),
                                             (tag_dim, hidden_dim)).astype(self.np.float32)
             self.W = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim),
@@ -37,7 +38,7 @@ class RNN:
         o = self.np.zeros((T, self.tag_dim)).astype(self.np.float32)
 
         for t in self.np.arange(T):
-            x_t = self.E[:, x[t]]
+            x_t = self.E[x[t]]
             s[t] = self.np.tanh(self.U.dot(x_t) + self.W.dot(s[t - 1]))
             o[t] = softmax(self.V.dot(s[t]))
         return [o, s]
@@ -76,8 +77,9 @@ class RNN:
             delta_t = self.V.T.dot(delta_o[t]) * (1 - (s[t] ** 2))
             for bptt_step in range(max(0, t - self.bptt_truncate), t + 1)[::-1]:
                 dLdW += self.np.outer(delta_t, s[bptt_step - 1])
-                dLdU[:, x[bptt_step]] += delta_t
-                dLdE[:, x[bptt_step]] += self.U.T.dot(delta_t)
+                x_t_step = self.E[x[bptt_step]]
+                dLdU += self.np.outer(delta_t, x_t_step)
+                dLdE[x[bptt_step]] += self.U.T.dot(delta_t)
                 delta_t = self.W.T.dot(delta_t) * (1 - (s[bptt_step] ** 2))
 
         return [dLdU, dLdV, dLdW, dLdE]
