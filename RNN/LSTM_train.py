@@ -39,3 +39,15 @@ if isinstance(tag_i, array_library.ndarray):
 else:
     pos_tags = indices_to_tags(tag_i, idx_to_tag)
     print(pos_tags)
+
+model.save('../model/lstm_model.pkl')
+
+data_to_save = {
+        'word_to_idx': word_to_idx,
+        'tag_to_idx': tag_to_idx,
+        'idx_to_tag': idx_to_tag,
+        'word_count': len(word_cnt),
+        'pos_count': len(pos_cnt)
+    }
+
+save_data(data_to_save, '../weight/vocab_data_f32.pkl')
