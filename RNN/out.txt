@@ -1,5 +1,5 @@
-LONDON/NNP ,/, England/NNP Reuters/NNPS Harry/NNP Potter/VBD star/MD Daniel/PRP$ Radcliffe/PRP gains/MD access/MD to/TO a/DT reported/VBN 20/CD million/CD 41/CD ./. 1/'' million/DT fortune/<START> as/IN he/PRP turns/VBZ 18/CD on/IN Monday/PRP$ ,/, but/CC he/PRP insists/VBZ the/DT money/NN won/MD t/RP cast/<START> a/DT spell/RBS on/IN him/PRP ./.
+LONDON/NNP ,/, England/NNP Reuters/NNPS Harry/NNP Potter/NNP star/RP Daniel/POS Radcliffe/NNP gains/POS access/`` to/TO a/DT reported/VBN 20/CD million/CD 41/CD ./. 1/WDT million/CD fortune/NN as/IN he/PRP turns/VBZ 18/CD on/IN Monday/NNP ,/, but/CC he/PRP insists/VBZ the/DT money/NN won/NN t/VBN cast/VBN a/DT spell/NN on/IN him/PRP ./.
 ``/`` The/DT things/NNS I/PRP like/VBP buying/VBG are/VBP things/NNS that/WDT cost/NN about/IN 10/CD pounds/NNS books/NNS and/CC CDs/NNS and/CC DVDs/NNP ./. ''/''
-Radcliffe/NNP s/NNP earnings/VBZ from/IN the/DT first/JJ five/CD Potter/DT films/NNS have/VBP been/VBN held/VBN in/IN a/DT trust/NN fund/VB which/WDT he/PRP has/VBZ not/RP been/VBN able/JJ to/TO touch/VB ./.
+Radcliffe/NNP s/POS earnings/POS from/IN the/DT first/JJ five/CD Potter/DT films/POS have/VBP been/VBN held/VBN in/IN a/DT trust/JJ fund/NN which/WDT he/PRP has/VBZ not/RB been/VBN able/JJ to/TO touch/VB ./.
 There/EX is/VBZ life/NN beyond/IN Potter/NNP ,/, however/RB ./.
-So/RB ,/, they/PRP end/VBP up/RP on/IN the/DT ninth/JJ floor/NN severely/RB mentally/RB disturbed/JJ ,/, but/CC not/RB getting/VBG any/DT real/JJ help/NN because/IN they/PRP re/VBD in/IN jail/JJ ./.
+So/RB ,/, they/PRP end/VBP up/RP on/IN the/DT ninth/JJ floor/NN severely/RB mentally/RB disturbed/JJ ,/, but/CC not/RB getting/VBG any/DT real/JJ help/NN because/IN they/PRP re/VBP in/IN jail/JJ ./.

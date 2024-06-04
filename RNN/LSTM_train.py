@@ -12,7 +12,7 @@ except ImportError:
     array_library = np
 
 data_line = read_file_to_list('../dataset/tagged_train.txt')
-processed_data_line = reader(data_line[:3000])
+processed_data_line = reader(data_line[:10000])
 pos_cnt, word_cnt = count_word_POS(processed_data_line)
 word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 
@@ -50,4 +50,4 @@ data_to_save = {
         'pos_count': len(pos_cnt)
     }
 
-save_data(data_to_save, '../weight/vocab_data_f32.pkl')
+save_data(data_to_save, '../weight/vocab_data_lstm_f32.pkl')
