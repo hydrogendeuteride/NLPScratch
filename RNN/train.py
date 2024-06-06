@@ -34,7 +34,18 @@ def train_skipgram(model, indexed_corpus, vocab_size, window_size=2, epochs=10, 
     start_time = time.time()
 
     for epoch in range(epochs):
-        for indexed_sentence in tqdm(indexed_corpus, desc=f'Epoch {epoch + 1}/{epochs}'):
+        if (epoch + 1) % evaluation_interval == 0:
+            loss = model.calculate_loss(indexed_corpus, vocab_size, window_size)
+            losses.append((num_examples, loss))
+            time_elapsed = time.time() - start_time
+            print(
+                f"\nLoss after {num_examples} examples, epoch {epoch + 1}: {loss:.6f} - Time elapsed: {time_elapsed:.2f} sec")
+
+            if len(losses) > 1 and losses[-1][1] > losses[-2][1]:
+                learning_rate *= 0.5
+                print("Learning rate decreased to:", learning_rate)
+
+        for indexed_sentence in tqdm(indexed_corpus, desc=f'Epoch {epoch + 1}/{epochs}', leave=True):
             sentence_length = len(indexed_sentence)
 
             for i, target_index in enumerate(indexed_sentence):
@@ -52,16 +63,5 @@ def train_skipgram(model, indexed_corpus, vocab_size, window_size=2, epochs=10, 
                 model.sgd_step(target, context_indices, learning_rate)
                 num_examples += 1
 
-        if epoch % evaluation_interval == 0:
-            loss = model.calculate_loss(indexed_corpus, vocab_size, window_size)
-            losses.append((num_examples, loss))
-            time_elapsed = time.time() - start_time
-            print(f"Loss after {num_examples} examples, epoch {epoch}: "f"{loss:.6f} -"
-                  f" Time elapsed: {time_elapsed:.2f} sec")
-
-            if len(losses) > 1 and losses[-1][1] > losses[-2][1]:
-                learning_rate *= 0.5
-                print("Learning rate decreased to:", learning_rate)
-
     total_time = time.time() - start_time
-    print(f"Training completed in {total_time:.2f} sec")
+    print(f"\nTraining completed in {total_time:.2f} sec")

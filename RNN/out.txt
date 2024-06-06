@@ -1,5 +1,5 @@
-LONDON/NNP ,/, England/NNP Reuters/NNPS Harry/NNP Potter/NNP star/RP Daniel/POS Radcliffe/NNP gains/POS access/`` to/TO a/DT reported/VBN 20/CD million/CD 41/CD ./. 1/WDT million/CD fortune/NN as/IN he/PRP turns/VBZ 18/CD on/IN Monday/NNP ,/, but/CC he/PRP insists/VBZ the/DT money/NN won/NN t/VBN cast/VBN a/DT spell/NN on/IN him/PRP ./.
-``/`` The/DT things/NNS I/PRP like/VBP buying/VBG are/VBP things/NNS that/WDT cost/NN about/IN 10/CD pounds/NNS books/NNS and/CC CDs/NNS and/CC DVDs/NNP ./. ''/''
-Radcliffe/NNP s/POS earnings/POS from/IN the/DT first/JJ five/CD Potter/DT films/POS have/VBP been/VBN held/VBN in/IN a/DT trust/JJ fund/NN which/WDT he/PRP has/VBZ not/RB been/VBN able/JJ to/TO touch/VB ./.
-There/EX is/VBZ life/NN beyond/IN Potter/NNP ,/, however/RB ./.
-So/RB ,/, they/PRP end/VBP up/RP on/IN the/DT ninth/JJ floor/NN severely/RB mentally/RB disturbed/JJ ,/, but/CC not/RB getting/VBG any/DT real/JJ help/NN because/IN they/PRP re/VBP in/IN jail/JJ ./.
+LONDON/NNP ,/, England/NNP Reuters/NNP Harry/NNP Potter/NNP star/NN Daniel/NNP Radcliffe/NNP gains/NNP access/NN to/TO a/DT reported/NN 20/JJ million/JJ 41/NNP ./. 1/VBN million/CD fortune/NNS as/IN he/PRP turns/VBD 18/JJ on/IN Monday/NNP ,/, but/CC he/PRP insists/VBD the/DT money/NN won/NN t/NNP cast/NNP a/DT spell/NN on/IN him/PRP ./.
+``/`` The/DT things/NNS I/PRP like/IN buying/JJ are/VBP things/RB that/IN cost/NN about/IN 10/CD pounds/NNS books/NNP and/CC CDs/NNP and/CC DVDs/NNP ./. ''/''
+Radcliffe/NNP s/TO earnings/Albert from/DT the/DT first/JJ five/JJ Potter/NNP films/NNS have/VBP been/VBN held/VBN in/IN a/DT trust/JJ fund/NN which/NNS he/PRP has/VBZ not/RB been/VBN able/JJ to/TO touch/VB ./.
+There/PRP is/. life/NN beyond/IN Potter/NNP ,/, however/RB ./.
+So/RB ,/, they/PRP end/VBD up/RB on/IN the/DT ninth/JJ floor/NN severely/NNS mentally/RB disturbed/NNP ,/, but/CC not/RB getting/VB any/DT real/JJ help/NN because/IN they/PRP re/VBP in/IN jail/NNP ./.

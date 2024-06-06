@@ -6,9 +6,10 @@ class SkipGram:
     def __init__(self, vocab_size, embedding_dim):
         self.vocab_size = vocab_size
         self.embedding_dim = embedding_dim
-        self.W1 = np.random.randn(embedding_dim, vocab_size) * 0.01
-        self.W2 = np.random.randn(vocab_size, embedding_dim) * 0.01
-
+        self.W1 = np.random.uniform(-np.sqrt(vocab_size), np.sqrt(vocab_size),
+                                    (embedding_dim, vocab_size)).astype(np.float32)
+        self.W2 = np.random.uniform(-np.sqrt(embedding_dim), np.sqrt(embedding_dim),
+                                    (vocab_size, embedding_dim)).astype(np.float32)
     def forward(self, x):
         h = np.dot(self.W1, x)
         u = np.dot(self.W2, h)
@@ -52,9 +53,9 @@ class SkipGram:
 
         for y in context_words:
             dLdu = o - y
-            dLdW2 = np.outer(dLdu, h)
+            dLdW2 += np.outer(dLdu, h)
             dLdh = np.dot(self.W2.T, dLdu)
-            dLdW1 = np.outer(dLdh, x)
+            dLdW1 += np.outer(dLdh, x)
 
         dLdW1 /= len(context_words)
         dLdW2 /= len(context_words)
