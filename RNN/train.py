@@ -49,14 +49,14 @@ def train_skipgram(model, indexed_corpus, vocab_size, window_size=2, epochs=10, 
             sentence_length = len(indexed_sentence)
 
             for i, target_index in enumerate(indexed_sentence):
-                target = np.zeros(vocab_size)
+                target = model.np.zeros(vocab_size)
                 target[target_index] = 1
                 context_indices = []
 
                 for j in range(max(0, i - window_size), min(sentence_length, i + window_size + 1)):
                     if i != j:
                         context_index = indexed_sentence[j]
-                        context_word = np.zeros(vocab_size)
+                        context_word = model.np.zeros(vocab_size)
                         context_word[context_index] = 1
                         context_indices.append(context_word)
 

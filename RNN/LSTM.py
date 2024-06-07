@@ -10,7 +10,7 @@ pathlib.PosixPath = pathlib.WindowsPath
 
 class LSTM:
     def __init__(self, word_dim, word_embed_dim, tag_dim, hidden_dim=100, params_path=None, bptt_truncate=4,
-                 max_norm=5, use_gpu=False):
+                 max_norm=5, embedding_weights=None, use_gpu=False):
         self.use_gpu = use_gpu and (default_library == 'cupy')
         self.np = cupy if self.use_gpu else numpy
 
@@ -24,7 +24,10 @@ class LSTM:
         if params_path:
             self.load(params_path)
         else:
-            self.E = self.np.random.uniform(-self.np.sqrt(1. / word_embed_dim), self.np.sqrt(1. / word_embed_dim),
+            if embedding_weights is not None:
+                self.E = embedding_weights
+            else:
+                self.E = self.np.random.uniform(-self.np.sqrt(1. / word_embed_dim), self.np.sqrt(1. / word_embed_dim),
                                             (word_dim, word_embed_dim)).astype(self.np.float32)
             self.Wf = self.np.random.uniform(-self.np.sqrt(1. / hidden_dim), self.np.sqrt(1. / hidden_dim),
                                              (hidden_dim, hidden_dim + word_embed_dim)).astype(self.np.float32)
