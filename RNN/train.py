@@ -61,7 +61,7 @@ def train_skipgram(model, indexed_corpus, vocab_size, window_size=2, epochs=10, 
                         context_indices.append(context_word)
 
                 model.sgd_step(target, context_indices, learning_rate)
-                num_examples += 1
+            num_examples += 1
 
     total_time = time.time() - start_time
     print(f"\nTraining completed in {total_time:.2f} sec")

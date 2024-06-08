@@ -2,7 +2,7 @@ from word2vec import *
 from train import *
 from utils import *
 import time
-import numpy as np
+import numpy
 
 try:
     import cupy
@@ -13,30 +13,34 @@ except ImportError:
 
 
 def find_nearest(word, embeddings, word_to_index, index_to_word, k=5):
+    npy = cupy.get_array_module(embeddings) if 'cupy' in str(type(embeddings)) else numpy
+
     if word not in word_to_index:
         return "Word not in dictionary."
 
     vec = embeddings[:, word_to_index[word]]
-    similarity = np.dot(embeddings.T, vec)
-    norms = np.linalg.norm(embeddings, axis=0) * np.linalg.norm(vec)
+    similarity = npy.dot(embeddings.T, vec)
+    norms = npy.linalg.norm(embeddings, axis=0) * npy.linalg.norm(vec)
     similarity /= norms
 
-    nearest = np.argsort(-similarity)[1:k + 1]
-    nearest_words = [index_to_word[idx] for idx in nearest]
+    nearest = npy.argsort(-similarity)[1:k + 1]
+    nearest_words = [index_to_word[int(idx)] for idx in nearest]
     return nearest_words
 
 
 def analogy(word_a, word_b, word_c, embeddings, word_to_index, index_to_word):
+    npy = cupy.get_array_module(embeddings) if 'cupy' in str(type(embeddings)) else numpy
+
     vec_a = embeddings[:, word_to_index[word_a]]
     vec_b = embeddings[:, word_to_index[word_b]]
     vec_c = embeddings[:, word_to_index[word_c]]
     vec_result = vec_b - vec_a + vec_c
-    similarity = np.dot(embeddings.T, vec_result)
-    norms = np.linalg.norm(embeddings, axis=0) * np.linalg.norm(vec_result)
+    similarity = npy.dot(embeddings.T, vec_result)
+    norms = npy.linalg.norm(embeddings, axis=0) * npy.linalg.norm(vec_result)
     similarity /= norms
 
-    nearest = np.argsort(-similarity)[0:5]
-    nearest_words = [index_to_word[idx] for idx in nearest]
+    nearest = npy.argsort(-similarity)[0:5]
+    nearest_words = [index_to_word[int(idx)] for idx in nearest]
     return nearest_words
 
 
