@@ -31,9 +31,9 @@ def find_nearest(word, embeddings, word_to_index, index_to_word, k=5):
 def analogy(word_a, word_b, word_c, embeddings, word_to_index, index_to_word):
     npy = cupy.get_array_module(embeddings) if 'cupy' in str(type(embeddings)) else numpy
 
-    vec_a = embeddings[:, word_to_index[word_a]]
-    vec_b = embeddings[:, word_to_index[word_b]]
-    vec_c = embeddings[:, word_to_index[word_c]]
+    vec_a = embeddings[word_to_index[word_a]]
+    vec_b = embeddings[word_to_index[word_b]]
+    vec_c = embeddings[word_to_index[word_c]]
     vec_result = vec_b - vec_a + vec_c
     similarity = npy.dot(embeddings.T, vec_result)
     norms = npy.linalg.norm(embeddings, axis=0) * npy.linalg.norm(vec_result)
@@ -58,6 +58,8 @@ model = SkipGram(len(word_to_idx), 256, use_gpu=True)
 
 train_skipgram(model, x1, len(word_to_idx), evaluation_interval=1)
 
+model.save('../weight/word2vec.pkl')
+
 print("\nTesting with nearest words:")
 test_words = ['as', 'serious', 'justice']
 for word in test_words:
@@ -75,5 +77,3 @@ for a, b, c in triplets:
         print(f"'{a}' is to '{b}' as '{c}' is to {result}")
     else:
         print(f"Words '{a}', '{b}', or '{c}' not found in vocabulary.")
-
-model.save('../weight/word2vec.pkl')
