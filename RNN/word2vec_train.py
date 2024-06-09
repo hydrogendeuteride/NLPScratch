@@ -31,6 +31,7 @@ def find_nearest(word, embeddings, word_to_index, index_to_word, k=5):
 def analogy(word_a, word_b, word_c, embeddings, word_to_index, index_to_word):
     npy = cupy.get_array_module(embeddings) if 'cupy' in str(type(embeddings)) else numpy
 
+    # print(embeddings.shape)
     vec_a = embeddings[word_to_index[word_a]]
     vec_b = embeddings[word_to_index[word_b]]
     vec_c = embeddings[word_to_index[word_c]]
@@ -45,7 +46,7 @@ def analogy(word_a, word_b, word_c, embeddings, word_to_index, index_to_word):
 
 
 data_line = read_file_to_list('../dataset/tagged_train.txt')
-processed_data_line = reader(data_line[:500])
+processed_data_line = reader(data_line[:5000])
 pos_cnt, word_cnt = count_word_POS(processed_data_line)
 word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 
@@ -57,6 +58,7 @@ print(len(word_to_idx))
 model = SkipGram(len(word_to_idx), 256, use_gpu=True)
 
 train_skipgram(model, x1, len(word_to_idx), evaluation_interval=1)
+model.load('../weight/word2vec.pkl')
 
 model.save('../weight/word2vec.pkl')
 
