@@ -21,7 +21,7 @@ def evaluate_rnn_accuracy(model, idx_to_tag, word_to_idx, test_file):
         correct_tags += sum(1 for pred_tag, true_tag in zip(predicted_tags, true_tags) if pred_tag == true_tag)
 
     accuracy = correct_tags / total_tags if total_tags > 0 else 0
-    return accuracy
+    print(f"accuracy: = {correct_tags} / {total_tags} =  {accuracy}")
 
 
 loaded_data = load_data('../weight/vocab_data_f32.pkl')
@@ -36,4 +36,3 @@ model = RNN(word_dim=word_count, word_embed_dim=128, tag_dim=pos_count, hidden_d
             params_path='../weight/test_f32.pkl')
 
 acc = evaluate_rnn_accuracy(model, idx_to_tag, word_to_idx, test_file='../dataset/tagged_test.txt')
-print(acc)

@@ -55,7 +55,7 @@ def main():
     #
     # idx_to_tag = build_reverse_tag_index(tag_to_idx)
 
-    loaded_data = load_data('weight/vocab_data_lstm_f32.pkl')
+    loaded_data = load_data('weight/vocab_data_lstm_f32_8k.pkl')
 
     word_to_idx = loaded_data['word_to_idx']
     tag_to_idx = loaded_data['tag_to_idx']

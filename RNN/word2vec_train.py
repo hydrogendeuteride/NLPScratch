@@ -24,7 +24,7 @@ def find_nearest(word, embeddings, word_to_index, index_to_word, k=5):
     similarity /= norms
 
     nearest = npy.argsort(-similarity)[1:k + 1]
-    nearest_words = [index_to_word[int(idx)] for idx in nearest]
+    nearest_words = [index_to_word[int(idx)] for idx in nearest.flatten()]
     return nearest_words
 
 
@@ -40,12 +40,12 @@ def analogy(word_a, word_b, word_c, embeddings, word_to_index, index_to_word):
     similarity /= norms
 
     nearest = npy.argsort(-similarity)[0:5]
-    nearest_words = [index_to_word[int(idx)] for idx in nearest]
+    nearest_words = [index_to_word[int(idx)] for idx in nearest.flatten()]
     return nearest_words
 
 
 data_line = read_file_to_list('../dataset/tagged_train.txt')
-processed_data_line = reader(data_line[:5000])
+processed_data_line = reader(data_line[:500])
 pos_cnt, word_cnt = count_word_POS(processed_data_line)
 word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 
@@ -59,7 +59,7 @@ model = SkipGram(len(word_to_idx), 256, use_gpu=True)
 train_skipgram(model, x1, len(word_to_idx), evaluation_interval=1)
 
 print("\nTesting with nearest words:")
-test_words = ['example', 'data', 'network', 'algorithm']
+test_words = ['as', 'serious', 'justice']
 for word in test_words:
     if word in word_to_idx:
         nearest = find_nearest(word, model.W1, word_to_idx, idx_to_word, k=5)
