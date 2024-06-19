@@ -45,7 +45,7 @@ def analogy(word_a, word_b, word_c, embeddings, word_to_index, index_to_word):
 
 
 data_line = read_file_to_list('../dataset/tagged_train.txt')
-processed_data_line = reader(data_line[:5000])
+processed_data_line = reader(data_line)
 pos_cnt, word_cnt = count_word_POS(processed_data_line)
 word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 
@@ -54,12 +54,12 @@ idx_to_tag = build_reverse_tag_index(tag_to_idx)
 idx_to_word = {idx: word for word, idx in word_to_idx.items()}
 
 print(len(word_to_idx))
-model = SkipGram(len(word_to_idx), 256, use_gpu=True)
+model = SkipGram(len(word_to_idx), 512, use_gpu=True)
 
-# train_skipgram(model, x1, len(word_to_idx), evaluation_interval=1)
+train_skipgram(model, x1, len(word_to_idx), evaluation_interval=1)
 
-# model.save('../weight/word2vec.pkl')
-model.load('../weight/word2vec.pkl')
+model.save('../weight/word2vec_all.pkl')
+model.load('../weight/word2vec_all.pkl')
 
 print("\nTesting with nearest words:")
 test_words = ['as', 'serious', 'justice']

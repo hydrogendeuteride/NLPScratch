@@ -69,9 +69,6 @@ class SkipGram:
         dLdW1 /= len(context_words)
         dLdW2 /= len(context_words)
 
-        dLdW1 /= len(context_words)
-        dLdW2 /= len(context_words)
-
         return dLdW1, dLdW2
 
     def sgd_step(self, x, context_words, learning_rate=0.01):

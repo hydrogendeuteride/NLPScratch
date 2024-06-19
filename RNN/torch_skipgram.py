@@ -1,0 +1,96 @@
+from word2vec import *
+from train import *
+from utils import *
+import time
+import numpy
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, Dataset
+
+
+data_line = read_file_to_list('../dataset/tagged_train.txt')
+processed_data_line = reader(data_line)
+pos_cnt, word_cnt = count_word_POS(processed_data_line)
+word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
+
+x1, y1 = text_to_indices(processed_data_line, word_to_idx, tag_to_idx)
+idx_to_tag = build_reverse_tag_index(tag_to_idx)
+idx_to_word = {idx: word for word, idx in word_to_idx.items()}
+
+
+def generate_skipgram_pairs(sentences, window_size=2):
+    pairs = []
+    for sentence in sentences:
+        sentence_length = len(sentence)
+        for i, target in enumerate(sentence):
+            for j in range(max(0, i - window_size), min(sentence_length, i + window_size + 1)):
+                if i != j:
+                    context = sentence[j]
+                    pairs.append((target, context))
+    return pairs
+
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+skipgram_pairs = generate_skipgram_pairs(x1[:100])
+print("fin")
+
+
+class SkipGramDataset(Dataset):
+    def __init__(self, data):
+        self.targets, self.contexts = zip(*data)
+
+    def __len__(self):
+        return len(self.targets)
+
+    def __getitem__(self, idx):
+        target = torch.LongTensor([self.targets[idx]])
+        context = torch.LongTensor([self.contexts[idx]])
+        return target, context
+
+
+class SkipGram(nn.Module):
+    def __init__(self, vocab_size, embedding_dim):
+        super(SkipGram, self).__init__()
+        self.embeddings = nn.Embedding(vocab_size, embedding_dim)
+        self.output_layer = nn.Linear(embedding_dim, vocab_size)
+
+    def forward(self, target):
+        embed = self.embeddings(target)
+        out = self.output_layer(embed)
+        return out
+
+
+embedding_dim = 256
+learning_rate = 0.001
+epochs = 50
+
+model = SkipGram(len(word_to_idx), embedding_dim).to(device)
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+dataset = SkipGramDataset(skipgram_pairs)
+dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
+
+for epoch in range(epochs):
+    total_loss = 0
+    for data in dataloader:
+        target, context = data
+        target, context = target.to(device), context.to(device)
+        target = target.squeeze()
+        context = context.squeeze()
+
+        optimizer.zero_grad()
+        output = model(target)
+        loss = criterion(output, context)
+        loss.backward()
+        optimizer.step()
+
+        total_loss += loss.item()
+    if (epoch + 1) % 1 == 0:
+        print(f'Epoch {epoch+1}, Loss: {total_loss/len(dataloader):.4f}')
+
+model.eval()
+embeddings = model.embeddings.weight.data.cpu().numpy()
+for word, idx in word_to_idx.items():
+    print(f'Word: {word}, Embedding: {embeddings[idx]}')
