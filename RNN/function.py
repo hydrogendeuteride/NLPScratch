@@ -1,6 +1,8 @@
 import numpy
+
 try:
     import cupy
+
     default_library = 'cupy'
 except ImportError:
     default_library = 'numpy'
@@ -38,3 +40,32 @@ def clip_grads(gradients, max_norm):
     if total_norm + 1e-6 > max_norm:
         for i in range(len(gradients)):
             gradients[i] *= max_norm / total_norm
+
+
+def relu(x):
+    np = cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy
+    return np.maximum(0, x)
+
+
+def layer_norm(x, eps=1e-6):
+    np = cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy
+    mean = np.mean(x, axis=-1, keepdims=True)
+    std = np.std(x, axis=-1, keepdims=True)
+    return (x - mean) / (std + eps)
+
+
+def relu_backward(dout, x):
+    dout[x <= 0] = 0
+    return dout
+
+
+def layer_norm_backward(dout, x, eps=1e-6):
+    np = cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy
+    mean = np.mean(x, axis=-1, keepdims=True)
+    std = np.std(x, axis=-1, keepdims=True)
+    N, D = x.shape
+    dx_normalized = dout / (std + eps)
+    dmean = np.sum(dout * -1 / (std + eps), axis=-1, keepdims=True)
+    dstd = np.sum(dout * (x - mean) * -1 / (std + eps)**2, axis=-1, keepdims=True)
+    dx = dx_normalized + dmean / N + dstd * 2 * (x - mean) / N
+    return dx

@@ -9,7 +9,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
 data_line = read_file_to_list('../dataset/tagged_train.txt')
-processed_data_line = reader(data_line)
+processed_data_line = reader(data_line[:100])
 pos_cnt, word_cnt = count_word_POS(processed_data_line)
 word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 
@@ -65,7 +65,7 @@ class SkipGram(nn.Module):
 
 embedding_dim = 256
 learning_rate = 0.001
-epochs = 30
+epochs = 20
 
 model = SkipGram(len(word_to_idx), embedding_dim).to(device)
 criterion = nn.CrossEntropyLoss()
@@ -105,9 +105,9 @@ def find_nearest(word, embeddings, word_to_index, index_to_word, k=5):
     if word not in word_to_index:
         return "Word not in dictionary."
 
-    vec = embeddings[:, word_to_index[word]]
-    similarity = npy.dot(embeddings.T, vec)
-    norms = npy.linalg.norm(embeddings, axis=0) * npy.linalg.norm(vec)
+    vec = embeddings[word_to_index[word]]
+    similarity = npy.dot(embeddings, vec)
+    norms = npy.linalg.norm(embeddings, axis=1) * npy.linalg.norm(vec)
     similarity /= norms
 
     nearest = npy.argsort(-similarity)[1:k + 1]
@@ -120,6 +120,7 @@ print("Model saved.")
 
 print("\nTesting with nearest words:")
 embeddings = model.get_embeddings()
+print(embeddings.shape)
 test_words = ['as', 'serious', 'justice']
 for word in test_words:
     if word in word_to_idx:
