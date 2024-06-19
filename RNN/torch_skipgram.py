@@ -8,7 +8,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
-
 data_line = read_file_to_list('../dataset/tagged_train.txt')
 processed_data_line = reader(data_line)
 pos_cnt, word_cnt = count_word_POS(processed_data_line)
@@ -32,7 +31,7 @@ def generate_skipgram_pairs(sentences, window_size=2):
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-skipgram_pairs = generate_skipgram_pairs(x1[:100])
+skipgram_pairs = generate_skipgram_pairs(x1)
 print("fin")
 
 
@@ -60,10 +59,13 @@ class SkipGram(nn.Module):
         out = self.output_layer(embed)
         return out
 
+    def get_embeddings(self):
+        return self.embeddings.weight.data.cpu().numpy()
+
 
 embedding_dim = 256
 learning_rate = 0.001
-epochs = 50
+epochs = 30
 
 model = SkipGram(len(word_to_idx), embedding_dim).to(device)
 criterion = nn.CrossEntropyLoss()
@@ -88,9 +90,40 @@ for epoch in range(epochs):
 
         total_loss += loss.item()
     if (epoch + 1) % 1 == 0:
-        print(f'Epoch {epoch+1}, Loss: {total_loss/len(dataloader):.4f}')
+        print(f'Epoch {epoch + 1}, Loss: {total_loss / len(dataloader):.4f}')
 
 model.eval()
 embeddings = model.embeddings.weight.data.cpu().numpy()
-for word, idx in word_to_idx.items():
-    print(f'Word: {word}, Embedding: {embeddings[idx]}')
+
+
+# for word, idx in word_to_idx.items():
+#     print(f'Word: {word}, Embedding: {embeddings[idx]}')
+
+def find_nearest(word, embeddings, word_to_index, index_to_word, k=5):
+    npy = cupy.get_array_module(embeddings) if 'cupy' in str(type(embeddings)) else numpy
+
+    if word not in word_to_index:
+        return "Word not in dictionary."
+
+    vec = embeddings[:, word_to_index[word]]
+    similarity = npy.dot(embeddings.T, vec)
+    norms = npy.linalg.norm(embeddings, axis=0) * npy.linalg.norm(vec)
+    similarity /= norms
+
+    nearest = npy.argsort(-similarity)[1:k + 1]
+    nearest_words = [index_to_word[int(idx)] for idx in nearest.flatten()]
+    return nearest_words
+
+
+torch.save(model.state_dict(), '../weight/word2vec_all.pth')
+print("Model saved.")
+
+print("\nTesting with nearest words:")
+embeddings = model.get_embeddings()
+test_words = ['as', 'serious', 'justice']
+for word in test_words:
+    if word in word_to_idx:
+        nearest = find_nearest(word, embeddings, word_to_idx, idx_to_word, k=5)
+        print(f"Nearest to '{word}': {nearest}")
+    else:
+        print(f"'{word}' not found in the vocabulary.")
