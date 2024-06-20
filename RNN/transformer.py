@@ -17,22 +17,20 @@ class Transformer:
         self.num_layers = num_layers
         self.max_len = max_len
 
-        self.We = self.np.random.uniform(-0.1, 0.1, (self.vocab_size, self.embed_dim)).astype(self.np.float32)
+        self.We = lecun_init((self.vocab_size, self.embed_dim), self.vocab_size, self.np)
 
-        self.Wq = self.np.random.uniform(-0.1, 0.1, (
-            self.num_layers, self.num_heads, self.embed_dim, self.embed_dim // self.num_heads)).astype(self.np.float32)
-        self.Wk = self.np.random.uniform(-0.1, 0.1, (
-            self.num_layers, self.num_heads, self.embed_dim, self.embed_dim // self.num_heads)).astype(self.np.float32)
-        self.Wv = self.np.random.uniform(-0.1, 0.1, (
-            self.num_layers, self.num_heads, self.embed_dim, self.embed_dim // self.num_heads)).astype(self.np.float32)
+        self.Wq = lecun_init((self.num_layers, self.num_heads, self.embed_dim, self.embed_dim // self.num_heads),
+                             self.embed_dim, self.np)
+        self.Wk = lecun_init((self.num_layers, self.num_heads, self.embed_dim, self.embed_dim // self.num_heads),
+                             self.embed_dim, self.np)
+        self.Wv = lecun_init((self.num_layers, self.num_heads, self.embed_dim, self.embed_dim // self.num_heads),
+                             self.embed_dim, self.np)
 
-        self.Wo = self.np.random.uniform(-0.1, 0.1, (self.num_layers, self.embed_dim, self.embed_dim)).astype(
-            self.np.float32)
+        self.Wo = lecun_init((self.num_layers, self.embed_dim, self.embed_dim), self.embed_dim, self.np)
 
-        self.W1 = self.np.random.uniform(-0.1, 0.1, (self.num_layers, self.embed_dim, self.ff_dim)).astype(
-            self.np.float32)
-        self.W2 = self.np.random.uniform(-0.1, 0.1, (self.num_layers, self.ff_dim, self.embed_dim)).astype(
-            self.np.float32)
+        self.W1 = lecun_init((self.num_layers, self.embed_dim, self.ff_dim), self.embed_dim, self.np)
+        self.W2 = lecun_init((self.num_layers, self.ff_dim, self.embed_dim), self.ff_dim, self.np)
+
         self.b1 = self.np.zeros((self.num_layers, self.ff_dim)).astype(self.np.float32)
         self.b2 = self.np.zeros((self.num_layers, self.embed_dim)).astype(self.np.float32)
 
@@ -50,7 +48,7 @@ class Transformer:
             K = H.dot(self.Wk[l].reshape(self.embed_dim, self.embed_dim))
             V = H.dot(self.Wv[l].reshape(self.embed_dim, self.embed_dim))
 
-            attention_scores = Q.dot(K.T) / np.sqrt(self.embed_dim)
+            attention_scores = Q.dot(K.T) / self.np.sqrt(self.embed_dim)
             attention_scores = attention_scores + (padding_mask * -1e9)
             attention_weights = softmax(attention_scores)
             attention_output = attention_weights.dot(V)
@@ -110,22 +108,51 @@ class Transformer:
             dH = dFFN_input
 
             dh_norm_mha = layer_norm_backward(dH, cache['H'][l])
-            gradients['Wo'][l] = dh_norm_mha.T.dot(cache['H'][l])
+            gradients['Wo'][l] = cache['H'][l].T.dot(dh_norm_mha)
 
             dAttention = dh_norm_mha.dot(self.Wo[l].T)
 
-            dV = dAttention.dot(attention_weights.T)
+            dV = attention_weights.T.dot(dAttention)
             gradients['Wv'][l] = cache['H'][l].T.dot(dV)
 
-            dK = dAttention.T.dot(Q)
+            dAttention_weights = dAttention.dot(V.T)
+            dK = dAttention_weights.T.dot(Q)
             gradients['Wk'][l] = H_prev.T.dot(dK)
 
-            dQ = dAttention.T.dot(K)
+            dQ = dAttention_weights.T.dot(K)
             gradients['Wq'][l] = H_prev.T.dot(dQ)
 
             dH = dAttention.dot(attention_weights.T)
 
         return gradients
+
+    def sgd(self, gradients, learning_rate):
+        self.We -= learning_rate * gradients['We']
+        self.Wq -= learning_rate * gradients['Wq']
+        self.Wk -= learning_rate * gradients['Wk']
+        self.Wv -= learning_rate * gradients['Wv']
+        self.Wo -= learning_rate * gradients['Wo']
+        self.W1 -= learning_rate * gradients['W1']
+        self.W2 -= learning_rate * gradients['W2']
+        self.b1 -= learning_rate * gradients['b1']
+        self.b2 -= learning_rate * gradients['b2']
+
+    def save(self, filename):
+        weights = {
+            'We': self.We,
+            'Wq': self.Wq,
+            'Wk': self.Wk,
+            'Wv': self.Wv,
+            'Wo': self.Wo,
+            'W1': self.W1,
+            'W2': self.W2,
+            'b1': self.b1,
+            'b2': self.b2,
+        }
+        if self.use_gpu:
+            weights = {k: v.get() for k, v in weights.items()}
+        with open(filename, 'wb') as f:
+            pickle.dump(weights, f)
 
 
 def pad_sequence(sequence, max_len, pad_token=0):
@@ -136,3 +163,8 @@ def pad_sequence(sequence, max_len, pad_token=0):
 def create_padding_mask(sequence, pad_token=0):
     mask = [1 if token == pad_token else 0 for token in sequence]
     return np.array(mask)
+
+
+def lecun_init(shape, fan_in, lib=np):
+    scale = lib.sqrt(1 / fan_in)
+    return lib.random.uniform(-scale, scale, shape).astype(lib.float32)
