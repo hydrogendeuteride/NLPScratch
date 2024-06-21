@@ -35,11 +35,11 @@ class Transformer:
         self.b2 = self.np.zeros((self.num_layers, self.embed_dim)).astype(self.np.float32)
 
         self.pe = positional_encoding(self.max_len, self.embed_dim, self.np)
+        self.look_ahead_mask = create_look_ahead_mask(max_len)
 
     def forward(self, x):
         x = pad_sequence(x, self.max_len)
         padding_mask = create_padding_mask(x)
-        look_ahead_mask = create_look_ahead_mask(x.shape[1])
 
         x = self.np.array(x)
         H = self.We[x] + self.pe[:, :x.shape[1], :]
@@ -52,7 +52,8 @@ class Transformer:
             V = H.dot(self.Wv[l].reshape(self.embed_dim, self.embed_dim))
 
             attention_scores = Q.dot(K.T) / self.np.sqrt(self.embed_dim)
-            attention_scores = attention_scores + look_ahead_mask + (padding_mask * -1e9)
+            attention_scores += self.look_ahead_mask
+            attention_scores += padding_mask[:, np.newaxis] * -1e9
             attention_weights = softmax(attention_scores)
             attention_output = attention_weights.dot(V)
 
@@ -72,7 +73,6 @@ class Transformer:
         return O, H, cache
 
     def backward(self, x, y):
-        T = len(x)
         O, H, cache = self.forward(x)
 
         gradients = {
@@ -164,7 +164,7 @@ def pad_sequence(sequence, max_len, pad_token=0):
 
 
 def create_padding_mask(sequence, pad_token=0):
-    mask = [1 if token == pad_token else 0 for token in sequence]
+    mask = np.array([[1 if token == pad_token else 0 for token in sequence]])
     return np.array(mask)
 
 
