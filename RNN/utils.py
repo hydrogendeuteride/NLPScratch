@@ -44,12 +44,20 @@ def count_word_POS(processed_data):
                 word_count[word] = 1
 
     word_count['<UNKNOWN>'] = 0
+    word_count['<PAD>'] = 0
     return pos_count, word_count
 
 
 def build_vocab(word_counts, pos_counts):
-    word_to_index = {word: i for i, word in enumerate(word_counts.keys())}
-    tag_to_index = {tag: i for i, tag in enumerate(pos_counts.keys())}
+    word_to_index = {'<PAD>': 0, '<UNKNOWN>': 1}
+    tag_to_index = {}
+
+    for i, word in enumerate(word_counts.keys(), 2):
+        word_to_index[word] = i
+
+    for i, tag in enumerate(pos_counts.keys()):
+        tag_to_index[tag] = i
+
     return word_to_index, tag_to_index
 
 

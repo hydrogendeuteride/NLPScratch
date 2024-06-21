@@ -34,12 +34,15 @@ class Transformer:
         self.b1 = self.np.zeros((self.num_layers, self.ff_dim)).astype(self.np.float32)
         self.b2 = self.np.zeros((self.num_layers, self.embed_dim)).astype(self.np.float32)
 
+        self.pe = positional_encoding(self.max_len, self.embed_dim, self.np)
+
     def forward(self, x):
         x = pad_sequence(x, self.max_len)
         padding_mask = create_padding_mask(x)
+        look_ahead_mask = create_look_ahead_mask(x.shape[1])
 
         x = self.np.array(x)
-        H = self.We[x]
+        H = self.We[x] + self.pe[:, :x.shape[1], :]
 
         cache = {'H': [], 'Q': [], 'K': [], 'V': [], 'attention_weights': []}
 
@@ -49,7 +52,7 @@ class Transformer:
             V = H.dot(self.Wv[l].reshape(self.embed_dim, self.embed_dim))
 
             attention_scores = Q.dot(K.T) / self.np.sqrt(self.embed_dim)
-            attention_scores = attention_scores + (padding_mask * -1e9)
+            attention_scores = attention_scores + look_ahead_mask + (padding_mask * -1e9)
             attention_weights = softmax(attention_scores)
             attention_output = attention_weights.dot(V)
 
@@ -168,3 +171,21 @@ def create_padding_mask(sequence, pad_token=0):
 def lecun_init(shape, fan_in, lib=np):
     scale = lib.sqrt(1 / fan_in)
     return lib.random.uniform(-scale, scale, shape).astype(lib.float32)
+
+
+def create_look_ahead_mask(size):
+    mask = np.triu(np.ones((size, size)), k=1).astype('float32')
+    return mask * -1e9
+
+
+def positional_encoding(max_len, embed_dim, np_module):
+    pos = np_module.arange(max_len)[:, np_module.newaxis]
+    i = np_module.arange(embed_dim)[np_module.newaxis, :]
+    angle_rates = 1 / np_module.power(10000, (2 * (i // 2)) / np_module.float32(embed_dim))
+    angle_rads = pos * angle_rates
+
+    angle_rads[:, 0::2] = np_module.sin(angle_rads[:, 0::2])
+    angle_rads[:, 1::2] = np_module.cos(angle_rads[:, 1::2])
+
+    return angle_rads[np_module.newaxis, ...]
+
