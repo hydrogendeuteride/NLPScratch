@@ -35,26 +35,8 @@ word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 max_len = 320
 
 X_train, Y_train = generate_sequence_data(processed_data_line, word_to_idx, max_len)
-model = Transformer(vocab_size=len(word_to_idx),embed_dim=512, num_heads=8, ff_dim=2048, num_layers=2, max_len=max_len)
+model = Transformer(vocab_size=len(word_to_idx),embed_dim=512, num_heads=8, ff_dim=2048, num_layers=2,
+                    max_len=max_len)
 model.sgd_step(X_train[3], Y_train[3])
 
-train_with_sgd(model, X_train, Y_train, nepoch=10, evaluation_loss_after=1)
-
-# print(X_train[10], Y_train[10])
-# print(len(X_train[10]))
-# print(word_to_idx)
-# print(word_cnt['<PAD>'])
-# t = pad_sequence(X_train[10], 50)
-# print(t)
-# print(len(t))
-
-# max_line, max_line_idx = 0, 0
-# for i in range(len(processed_data_line)):
-#     max_line = max(max_line, len(processed_data_line[i]))
-#     if max_line == len(processed_data_line[i]):
-#         max_line_idx = i
-#
-# print(max_line)
-# print(max_line_idx)
-# print(processed_data_line[max_line_idx])
-# max = 284 -> token=320
+train_with_sgd(model, X_train, Y_train, learning_rate=0.001, nepoch=10, evaluation_loss_after=1)

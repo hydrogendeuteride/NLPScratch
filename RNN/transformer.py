@@ -6,7 +6,8 @@ import pickle
 
 
 class Transformer:
-    def __init__(self, vocab_size, embed_dim, num_heads, ff_dim, num_layers, max_len, use_gpu=False):
+    def __init__(self, vocab_size, embed_dim, num_heads, ff_dim, num_layers, max_len,
+                 embedding_weight=None, use_gpu=False):
         self.use_gpu = use_gpu and (default_library == 'cupy')
         self.np = cupy if self.use_gpu else numpy
 
@@ -17,7 +18,10 @@ class Transformer:
         self.num_layers = num_layers
         self.max_len = max_len
 
-        self.We = lecun_init((self.vocab_size, self.embed_dim), self.vocab_size, self.np)
+        if embedding_weight is None:
+            self.We = lecun_init((self.vocab_size, self.embed_dim), self.vocab_size, self.np)
+        else:
+            self.We = embedding_weight
 
         self.Wq = lecun_init((self.num_layers, self.num_heads, self.embed_dim, self.embed_dim // self.num_heads),
                              self.embed_dim, self.np)
@@ -77,20 +81,18 @@ class Transformer:
     def backward(self, x, y):
         O, H, cache = self.forward(x)
 
-        gradients = {
-            'We': self.np.zeros(self.We.shape).astype(self.np.float32),
-            'Wq': self.np.zeros(self.Wq.shape).astype(self.np.float32),
-            'Wk': self.np.zeros(self.Wk.shape).astype(self.np.float32),
-            'Wv': self.np.zeros(self.Wv.shape).astype(self.np.float32),
-            'Wo': self.np.zeros(self.Wo.shape).astype(self.np.float32),
-            'W1': self.np.zeros(self.W1.shape).astype(self.np.float32),
-            'W2': self.np.zeros(self.W2.shape).astype(self.np.float32),
-            'b1': self.np.zeros(self.b1.shape).astype(self.np.float32),
-            'b2': self.np.zeros(self.b2.shape).astype(self.np.float32),
-        }
+        dWe = self.np.zeros(self.We.shape).astype(self.np.float32)
+        dWq = self.np.zeros(self.Wq.shape).astype(self.np.float32)
+        dWk = self.np.zeros(self.Wk.shape).astype(self.np.float32)
+        dWv = self.np.zeros(self.Wv.shape).astype(self.np.float32)
+        dWo = self.np.zeros(self.Wo.shape).astype(self.np.float32)
+        dW1 = self.np.zeros(self.W1.shape).astype(self.np.float32)
+        dW2 = self.np.zeros(self.W2.shape).astype(self.np.float32)
+        db1 = self.np.zeros(self.b1.shape).astype(self.np.float32)
+        db2 = self.np.zeros(self.b2.shape).astype(self.np.float32)
 
         dO = O - y
-        gradients['We'] = dO.T.dot(H)
+        dWe = dO.T.dot(H)
 
         dH = dO.dot(self.We)
 
@@ -103,46 +105,48 @@ class Transformer:
 
             dH_norm_ffn = layer_norm_backward(dH, cache['H'][l])
             dFFN = relu_backward(dH_norm_ffn.dot(self.W2[l].T), cache['relu_input'][l])
-            gradients['W2'][l] = cache['relu_input'][l].T.dot(dH_norm_ffn)
-            gradients['b2'][l] = dH_norm_ffn.sum(axis=0)
+            dW2[l] = cache['relu_input'][l].T.dot(dH_norm_ffn)
+            db2[l] = dH_norm_ffn.sum(axis=0)
 
             dFFN_input = dFFN.dot(self.W1[l].T)
-            gradients['W1'][l] = H_prev.T.dot(dFFN)
-            gradients['b1'][l] = dFFN.sum(axis=0)
+            dW1[l] = H_prev.T.dot(dFFN)
+            db1[l] = dFFN.sum(axis=0)
 
             dH = dFFN_input
 
             dh_norm_mha = layer_norm_backward(dH, cache['H'][l])
-            gradients['Wo'][l] = cache['H'][l].T.dot(dh_norm_mha)
+            dWo[l] = cache['H'][l].T.dot(dh_norm_mha)
 
             dAttention = dh_norm_mha.dot(self.Wo[l].T)
 
             dV = attention_weights.T.dot(dAttention)
-            gradients['Wv'][l] = cache['H'][l].T.dot(dV).reshape(8, 512, 64)
+            dWv[l] = cache['H'][l].T.dot(dV).reshape(8, 512, 64)
 
             dAttention_weights = dAttention.dot(V.T)
             dK = dAttention_weights.T.dot(Q)
-            gradients['Wk'][l] = H_prev.T.dot(dK).reshape(8, 512, 64)
+            dWk[l] = H_prev.T.dot(dK).reshape(8, 512, 64)
 
             dQ = dAttention_weights.T.dot(K)
-            gradients['Wq'][l] = H_prev.T.dot(dQ).reshape(8, 512, 64)
+            dWq[l] = H_prev.T.dot(dQ).reshape(8, 512, 64)
 
             # dH = dAttention.dot(attention_weights.T)
 
-        return gradients
+        return [dWe, dWq, dWk, dWv, dWo, dW1, dW2, db1, db2]
 
     def sgd_step(self, x, y, learning_rate=0.01):
         gradients = self.backward(x, y)
 
-        self.We -= learning_rate * gradients['We']
-        self.Wq -= learning_rate * gradients['Wq']
-        self.Wk -= learning_rate * gradients['Wk']
-        self.Wv -= learning_rate * gradients['Wv']
-        self.Wo -= learning_rate * gradients['Wo']
-        self.W1 -= learning_rate * gradients['W1']
-        self.W2 -= learning_rate * gradients['W2']
-        self.b1 -= learning_rate * gradients['b1']
-        self.b2 -= learning_rate * gradients['b2']
+        clip_grads(gradients, 1.0)
+
+        self.We -= learning_rate * gradients[0]
+        self.Wq -= learning_rate * gradients[1]
+        self.Wk -= learning_rate * gradients[2]
+        self.Wv -= learning_rate * gradients[3]
+        self.Wo -= learning_rate * gradients[4]
+        self.W1 -= learning_rate * gradients[5]
+        self.W2 -= learning_rate * gradients[6]
+        self.b1 -= learning_rate * gradients[7]
+        self.b2 -= learning_rate * gradients[8]
 
     def calculate_total_loss(self, x, y):
         y_pred, _, _ = self.forward(x)

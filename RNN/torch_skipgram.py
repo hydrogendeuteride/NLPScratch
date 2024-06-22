@@ -1,3 +1,5 @@
+import os
+
 from word2vec import *
 from train import *
 from utils import *
@@ -71,6 +73,11 @@ model = SkipGram(len(word_to_idx), embedding_dim).to(device)
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
+model_path = '../weight/word2vec_all.pth'
+if os.path.exists(model_path):
+    model.load_state_dict(torch.load(model_path))
+    print("Model loaded for further training.")
+
 dataset = SkipGramDataset(skipgram_pairs)
 dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
 
@@ -94,10 +101,6 @@ for epoch in range(epochs):
 
 model.eval()
 embeddings = model.embeddings.weight.data.cpu().numpy()
-
-
-# for word, idx in word_to_idx.items():
-#     print(f'Word: {word}, Embedding: {embeddings[idx]}')
 
 def find_nearest(word, embeddings, word_to_index, index_to_word, k=5):
     npy = cupy.get_array_module(embeddings) if 'cupy' in str(type(embeddings)) else numpy
