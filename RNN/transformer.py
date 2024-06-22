@@ -118,7 +118,6 @@ class Transformer:
             dAttention = dh_norm_mha.dot(self.Wo[l].T)
 
             dV = attention_weights.T.dot(dAttention)
-            print(cache['H'][l].T.dot(dV).shape)
             gradients['Wv'][l] = cache['H'][l].T.dot(dV).reshape(8, 512, 64)
 
             dAttention_weights = dAttention.dot(V.T)
@@ -145,7 +144,7 @@ class Transformer:
         self.b1 -= learning_rate * gradients['b1']
         self.b2 -= learning_rate * gradients['b2']
 
-    def calculate_loss(self, x, y):
+    def calculate_total_loss(self, x, y):
         y_pred, _, _ = self.forward(x)
         y_true_one_hot = self.np.eye(self.vocab_size)[y]
 
@@ -154,6 +153,12 @@ class Transformer:
 
         loss = -self.np.sum(y_true_one_hot * self.np.log(y_pred)) / y_pred.shape[0]
         return loss
+
+    def calculate_loss(self, xs, ys):
+        total_loss = 0.0
+        for x, y in zip(xs, ys):
+            total_loss += self.calculate_total_loss(x, y)
+        return total_loss / len(xs)
 
     def save(self, filename):
         weights = {
@@ -199,5 +204,5 @@ def positional_encoding(max_len, embed_dim, np_module):
     div_term = np_module.exp(np_module.arange(0, embed_dim, 2) * -(np_module.log(10000.0) / embed_dim))
     pe[:, 0::2] = np_module.sin(position * div_term)
     pe[:, 1::2] = np_module.cos(position * div_term)
-    return pe.astype(np.float32)
+    return pe.astype(np_module.float32)
 

@@ -23,12 +23,12 @@ def generate_sequence_data(processed_data, word_to_index, max_len):
             Y.append(indices[i])
 
     X = pad_sequence(X, max_len)
-    Y = np.array(Y)
+    # Y = np.array(Y)
     return X, Y
 
 
 data_line = read_file_to_list('../dataset/tagged_train.txt')
-processed_data_line = reader(data_line[:5000])
+processed_data_line = reader(data_line[:100])
 pos_cnt, word_cnt = count_word_POS(processed_data_line)
 word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 
@@ -37,6 +37,8 @@ max_len = 320
 X_train, Y_train = generate_sequence_data(processed_data_line, word_to_idx, max_len)
 model = Transformer(vocab_size=len(word_to_idx),embed_dim=512, num_heads=8, ff_dim=2048, num_layers=2, max_len=max_len)
 model.sgd_step(X_train[3], Y_train[3])
+
+train_with_sgd(model, X_train, Y_train, nepoch=10, evaluation_loss_after=1)
 
 # print(X_train[10], Y_train[10])
 # print(len(X_train[10]))
