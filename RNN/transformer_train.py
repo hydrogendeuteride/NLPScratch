@@ -27,9 +27,6 @@ def generate_sequence_data(processed_data, word_to_index, max_len):
     return X, Y
 
 
-def train_transformer(model, x, y, epochs, learning_rate):
-
-
 data_line = read_file_to_list('../dataset/tagged_train.txt')
 processed_data_line = reader(data_line[:5000])
 pos_cnt, word_cnt = count_word_POS(processed_data_line)
@@ -38,6 +35,9 @@ word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 max_len = 320
 
 X_train, Y_train = generate_sequence_data(processed_data_line, word_to_idx, max_len)
+model = Transformer(vocab_size=len(word_to_idx),embed_dim=512, num_heads=8, ff_dim=2048, num_layers=2, max_len=max_len)
+model.sgd_step(X_train[3], Y_train[3])
+
 # print(X_train[10], Y_train[10])
 # print(len(X_train[10]))
 # print(word_to_idx)
@@ -45,7 +45,6 @@ X_train, Y_train = generate_sequence_data(processed_data_line, word_to_idx, max_
 # t = pad_sequence(X_train[10], 50)
 # print(t)
 # print(len(t))
-model = Transformer(vocab_size=len(word_to_idx),embed_dim=512, num_heads=8, ff_dim=2048, num_layers=2, max_len=max_len)
 
 # max_line, max_line_idx = 0, 0
 # for i in range(len(processed_data_line)):

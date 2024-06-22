@@ -55,8 +55,9 @@ def layer_norm(x, eps=1e-6):
 
 
 def relu_backward(dout, x):
-    dout[x <= 0] = 0
-    return dout
+    dx = dout.copy()
+    dx[x <= 0] = 0
+    return dx
 
 
 def layer_norm_backward(dout, x, eps=1e-6):

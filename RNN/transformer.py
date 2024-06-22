@@ -42,9 +42,9 @@ class Transformer:
         padding_mask = create_padding_mask(x)
 
         x = self.np.array(x)
-        H = self.We[x] + self.pe[:, :x.shape[1], :]
+        H = self.We[x] + self.pe
 
-        cache = {'H': [], 'Q': [], 'K': [], 'V': [], 'attention_weights': []}
+        cache = {'H': [], 'Q': [], 'K': [], 'V': [], 'attention_weights': [], 'relu_input':[]}
 
         for l in range(self.num_layers):
             Q = H.dot(self.Wq[l].reshape(self.embed_dim, self.embed_dim))
@@ -60,7 +60,8 @@ class Transformer:
             multi_head_output = attention_output.dot(self.Wo[l])
             H = layer_norm(H + multi_head_output)
 
-            ffn_output = relu(H.dot(self.W1[l]) + self.b1[l])
+            relu_input = H.dot(self.W1[l]) + self.b1[l]
+            ffn_output = relu(relu_input)
             H = layer_norm(H + ffn_output.dot(self.W2[l]) + self.b2[l])
 
             cache['H'].append(H)
@@ -68,6 +69,7 @@ class Transformer:
             cache['K'].append(K)
             cache['V'].append(V)
             cache['attention_weights'].append(attention_weights)
+            cache['relu_input'].append(relu_input)
 
         O = softmax(H.dot(self.We.T))
         return O, H, cache
@@ -88,7 +90,7 @@ class Transformer:
         }
 
         dO = O - y
-        gradients['We'] = dO.T.dot(H).T
+        gradients['We'] = dO.T.dot(H)
 
         dH = dO.dot(self.We)
 
@@ -100,8 +102,8 @@ class Transformer:
             H_prev = cache['H'][l - 1] if l > 0 else self.We[x]
 
             dH_norm_ffn = layer_norm_backward(dH, cache['H'][l])
-            dFFN = relu_backward(dH_norm_ffn.dot(self.W2[l].T), cache['H'][l])
-            gradients['W2'][l] = cache['H'][l].T.dot(dH_norm_ffn)
+            dFFN = relu_backward(dH_norm_ffn.dot(self.W2[l].T), cache['relu_input'][l])
+            gradients['W2'][l] = cache['relu_input'][l].T.dot(dH_norm_ffn)
             gradients['b2'][l] = dH_norm_ffn.sum(axis=0)
 
             dFFN_input = dFFN.dot(self.W1[l].T)
@@ -116,20 +118,23 @@ class Transformer:
             dAttention = dh_norm_mha.dot(self.Wo[l].T)
 
             dV = attention_weights.T.dot(dAttention)
-            gradients['Wv'][l] = cache['H'][l].T.dot(dV)
+            print(cache['H'][l].T.dot(dV).shape)
+            gradients['Wv'][l] = cache['H'][l].T.dot(dV).reshape(8, 512, 64)
 
             dAttention_weights = dAttention.dot(V.T)
             dK = dAttention_weights.T.dot(Q)
-            gradients['Wk'][l] = H_prev.T.dot(dK)
+            gradients['Wk'][l] = H_prev.T.dot(dK).reshape(8, 512, 64)
 
             dQ = dAttention_weights.T.dot(K)
-            gradients['Wq'][l] = H_prev.T.dot(dQ)
+            gradients['Wq'][l] = H_prev.T.dot(dQ).reshape(8, 512, 64)
 
-            dH = dAttention.dot(attention_weights.T)
+            # dH = dAttention.dot(attention_weights.T)
 
         return gradients
 
-    def sgd(self, gradients, learning_rate):
+    def sgd_step(self, x, y, learning_rate=0.01):
+        gradients = self.backward(x, y)
+
         self.We -= learning_rate * gradients['We']
         self.Wq -= learning_rate * gradients['Wq']
         self.Wk -= learning_rate * gradients['Wk']
@@ -139,6 +144,16 @@ class Transformer:
         self.W2 -= learning_rate * gradients['W2']
         self.b1 -= learning_rate * gradients['b1']
         self.b2 -= learning_rate * gradients['b2']
+
+    def calculate_loss(self, x, y):
+        y_pred, _, _ = self.forward(x)
+        y_true_one_hot = self.np.eye(self.vocab_size)[y]
+
+        epsilon = 1e-9
+        y_pred = self.np.clip(y_pred, epsilon, 1.0 - epsilon)
+
+        loss = -self.np.sum(y_true_one_hot * self.np.log(y_pred)) / y_pred.shape[0]
+        return loss
 
     def save(self, filename):
         weights = {
@@ -164,7 +179,7 @@ def pad_sequence(sequence, max_len, pad_token=0):
 
 
 def create_padding_mask(sequence, pad_token=0):
-    mask = np.array([[1 if token == pad_token else 0 for token in sequence]])
+    mask = np.array([1 if token == pad_token else 0 for token in sequence])
     return np.array(mask)
 
 
@@ -179,13 +194,10 @@ def create_look_ahead_mask(size):
 
 
 def positional_encoding(max_len, embed_dim, np_module):
-    pos = np_module.arange(max_len)[:, np_module.newaxis]
-    i = np_module.arange(embed_dim)[np_module.newaxis, :]
-    angle_rates = 1 / np_module.power(10000, (2 * (i // 2)) / np_module.float32(embed_dim))
-    angle_rads = pos * angle_rates
-
-    angle_rads[:, 0::2] = np_module.sin(angle_rads[:, 0::2])
-    angle_rads[:, 1::2] = np_module.cos(angle_rads[:, 1::2])
-
-    return angle_rads[np_module.newaxis, ...]
+    pe = np_module.zeros((max_len, embed_dim))
+    position = np_module.arange(0, max_len)[:, np_module.newaxis]
+    div_term = np_module.exp(np_module.arange(0, embed_dim, 2) * -(np_module.log(10000.0) / embed_dim))
+    pe[:, 0::2] = np_module.sin(position * div_term)
+    pe[:, 1::2] = np_module.cos(position * div_term)
+    return pe.astype(np.float32)
 
