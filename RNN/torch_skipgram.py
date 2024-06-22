@@ -11,7 +11,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
 data_line = read_file_to_list('../dataset/tagged_train.txt')
-processed_data_line = reader(data_line[:100])
+processed_data_line = reader(data_line[:10000])
 pos_cnt, word_cnt = count_word_POS(processed_data_line)
 word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 
@@ -65,9 +65,9 @@ class SkipGram(nn.Module):
         return self.embeddings.weight.data.cpu().numpy()
 
 
-embedding_dim = 256
+embedding_dim = 512
 learning_rate = 0.001
-epochs = 20
+epochs = 50
 
 model = SkipGram(len(word_to_idx), embedding_dim).to(device)
 criterion = nn.CrossEntropyLoss()
