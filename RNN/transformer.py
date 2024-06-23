@@ -42,13 +42,13 @@ class Transformer:
         self.look_ahead_mask = create_look_ahead_mask(max_len, self.np)
 
     def forward(self, x):
-        # x = pad_sequence(x, self.max_len, lib=self.np)
         padding_mask = create_padding_mask(x, lib=self.np)
 
         x = self.np.array(x)
         H = self.We[x] + self.pe
 
-        cache = {'H': [], 'Q': [], 'K': [], 'V': [], 'attention_weights': [], 'relu_input':[]}
+        cache = {'H': [], 'Q': [], 'K': [], 'V': [], 'attention_weights': [], 'relu_input': [],
+                 'attention_output': []}
 
         for l in range(self.num_layers):
             Q = H.dot(self.Wq[l].reshape(self.embed_dim, self.embed_dim))
@@ -74,6 +74,7 @@ class Transformer:
             cache['V'].append(V)
             cache['attention_weights'].append(attention_weights)
             cache['relu_input'].append(relu_input)
+            cache['attention_output'].append(attention_output)
 
         O = softmax(H.dot(self.We.T))
         return O, H, cache
@@ -115,7 +116,7 @@ class Transformer:
             dH = dFFN_input
 
             dh_norm_mha = layer_norm_backward(dH, cache['H'][l])
-            dWo[l] = cache['H'][l].T.dot(dh_norm_mha)
+            dWo[l] = cache['attention_output'][l].T.dot(dh_norm_mha)
 
             dAttention = dh_norm_mha.dot(self.Wo[l].T)
 
@@ -123,13 +124,11 @@ class Transformer:
             dWv[l] = cache['H'][l].T.dot(dV).reshape(8, 512, 64)
 
             dAttention_weights = dAttention.dot(V.T)
-            dK = dAttention_weights.T.dot(Q)
+            dK = dAttention_weights.dot(Q)
             dWk[l] = H_prev.T.dot(dK).reshape(8, 512, 64)
 
-            dQ = dAttention_weights.T.dot(K)
+            dQ = dAttention_weights.dot(K)
             dWq[l] = H_prev.T.dot(dQ).reshape(8, 512, 64)
-
-            # dH = dAttention.dot(attention_weights.T)
 
         return [dWe, dWq, dWk, dWv, dWo, dW1, dW2, db1, db2]
 
