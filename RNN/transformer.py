@@ -124,10 +124,10 @@ class Transformer:
             dWv[l] = cache['H'][l].T.dot(dV).reshape(8, 512, 64)
 
             dAttention_weights = dAttention.dot(V.T)
-            dK = dAttention_weights.dot(Q)
+            dK = dAttention_weights.T.dot(Q)
             dWk[l] = H_prev.T.dot(dK).reshape(8, 512, 64)
 
-            dQ = dAttention_weights.dot(K)
+            dQ = dAttention_weights.T.dot(K)
             dWq[l] = H_prev.T.dot(dQ).reshape(8, 512, 64)
 
         return [dWe, dWq, dWk, dWv, dWo, dW1, dW2, db1, db2]
