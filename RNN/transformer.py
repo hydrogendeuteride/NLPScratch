@@ -21,7 +21,7 @@ class Transformer:
         if embedding_weight is None:
             self.We = lecun_init((self.vocab_size, self.embed_dim), self.vocab_size, self.np)
         else:
-            self.We = embedding_weight
+            self.We = self.np.array(embedding_weight) if self.use_gpu else embedding_weight
 
         self.Wq = lecun_init((self.num_layers, self.num_heads, self.embed_dim, self.embed_dim // self.num_heads),
                              self.embed_dim, self.np)
@@ -39,11 +39,11 @@ class Transformer:
         self.b2 = self.np.zeros((self.num_layers, self.embed_dim)).astype(self.np.float32)
 
         self.pe = positional_encoding(self.max_len, self.embed_dim, self.np)
-        self.look_ahead_mask = create_look_ahead_mask(max_len)
+        self.look_ahead_mask = create_look_ahead_mask(max_len, self.np)
 
     def forward(self, x):
-        x = pad_sequence(x, self.max_len)
-        padding_mask = create_padding_mask(x)
+        # x = pad_sequence(x, self.max_len, lib=self.np)
+        padding_mask = create_padding_mask(x, lib=self.np)
 
         x = self.np.array(x)
         H = self.We[x] + self.pe
@@ -182,14 +182,14 @@ class Transformer:
             pickle.dump(weights, f)
 
 
-def pad_sequence(sequence, max_len, pad_token=0):
+def pad_sequence(sequence, max_len, pad_token=0, lib=np):
     padded_sequence = sequence + [pad_token] * (max_len - len(sequence))
     return padded_sequence
 
 
-def create_padding_mask(sequence, pad_token=0):
-    mask = np.array([1 if token == pad_token else 0 for token in sequence])
-    return np.array(mask)
+def create_padding_mask(sequence, pad_token=0, lib=np):
+    mask = lib.array([1 if token == pad_token else 0 for token in sequence])
+    return lib.array(mask)
 
 
 def lecun_init(shape, fan_in, lib=np):
@@ -197,8 +197,8 @@ def lecun_init(shape, fan_in, lib=np):
     return lib.random.uniform(-scale, scale, shape).astype(lib.float32)
 
 
-def create_look_ahead_mask(size):
-    mask = np.triu(np.ones((size, size)), k=1).astype('float32')
+def create_look_ahead_mask(size, lib=np):
+    mask = lib.triu(lib.ones((size, size)), k=1).astype('float32')
     return mask * -1e9
 
 

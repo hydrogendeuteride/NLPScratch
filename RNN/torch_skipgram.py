@@ -10,15 +10,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
-data_line = read_file_to_list('../dataset/tagged_train.txt')
-processed_data_line = reader(data_line[:10000])
-pos_cnt, word_cnt = count_word_POS(processed_data_line)
-word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
-
-x1, y1 = text_to_indices(processed_data_line, word_to_idx, tag_to_idx)
-idx_to_tag = build_reverse_tag_index(tag_to_idx)
-idx_to_word = {idx: word for word, idx in word_to_idx.items()}
-
 
 def generate_skipgram_pairs(sentences, window_size=2):
     pairs = []
@@ -30,12 +21,6 @@ def generate_skipgram_pairs(sentences, window_size=2):
                     context = sentence[j]
                     pairs.append((target, context))
     return pairs
-
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-skipgram_pairs = generate_skipgram_pairs(x1)
-print("fin")
-
 
 class SkipGramDataset(Dataset):
     def __init__(self, data):
@@ -64,44 +49,6 @@ class SkipGram(nn.Module):
     def get_embeddings(self):
         return self.embeddings.weight.data.cpu().numpy()
 
-
-embedding_dim = 512
-learning_rate = 0.001
-epochs = 50
-
-model = SkipGram(len(word_to_idx), embedding_dim).to(device)
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-
-model_path = '../weight/word2vec_all.pth'
-if os.path.exists(model_path):
-    model.load_state_dict(torch.load(model_path))
-    print("Model loaded for further training.")
-
-dataset = SkipGramDataset(skipgram_pairs)
-dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
-
-for epoch in range(epochs):
-    total_loss = 0
-    for data in dataloader:
-        target, context = data
-        target, context = target.to(device), context.to(device)
-        target = target.squeeze()
-        context = context.squeeze()
-
-        optimizer.zero_grad()
-        output = model(target)
-        loss = criterion(output, context)
-        loss.backward()
-        optimizer.step()
-
-        total_loss += loss.item()
-    if (epoch + 1) % 1 == 0:
-        print(f'Epoch {epoch + 1}, Loss: {total_loss / len(dataloader):.4f}')
-
-model.eval()
-embeddings = model.embeddings.weight.data.cpu().numpy()
-
 def find_nearest(word, embeddings, word_to_index, index_to_word, k=5):
     npy = cupy.get_array_module(embeddings) if 'cupy' in str(type(embeddings)) else numpy
 
@@ -117,17 +64,67 @@ def find_nearest(word, embeddings, word_to_index, index_to_word, k=5):
     nearest_words = [index_to_word[int(idx)] for idx in nearest.flatten()]
     return nearest_words
 
+if __name__ == "__main__":
+    data_line = read_file_to_list('../dataset/tagged_train.txt')
+    processed_data_line = reader(data_line[:10000])
+    pos_cnt, word_cnt = count_word_POS(processed_data_line)
+    word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 
-torch.save(model.state_dict(), '../weight/word2vec_all.pth')
-print("Model saved.")
+    x1, y1 = text_to_indices(processed_data_line, word_to_idx, tag_to_idx)
+    idx_to_tag = build_reverse_tag_index(tag_to_idx)
+    idx_to_word = {idx: word for word, idx in word_to_idx.items()}
 
-print("\nTesting with nearest words:")
-embeddings = model.get_embeddings()
-print(embeddings.shape)
-test_words = ['as', 'serious', 'justice']
-for word in test_words:
-    if word in word_to_idx:
-        nearest = find_nearest(word, embeddings, word_to_idx, idx_to_word, k=5)
-        print(f"Nearest to '{word}': {nearest}")
-    else:
-        print(f"'{word}' not found in the vocabulary.")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    skipgram_pairs = generate_skipgram_pairs(x1)
+    print("fin")
+
+    embedding_dim = 512
+    learning_rate = 0.001
+    epochs = 50
+
+    model = SkipGram(len(word_to_idx), embedding_dim).to(device)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+    model_path = '../weight/word2vec_all.pth'
+    if os.path.exists(model_path):
+        model.load_state_dict(torch.load(model_path))
+        print("Model loaded for further training.")
+
+    dataset = SkipGramDataset(skipgram_pairs)
+    dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
+
+    for epoch in range(epochs):
+        total_loss = 0
+        for data in dataloader:
+            target, context = data
+            target, context = target.to(device), context.to(device)
+            target = target.squeeze()
+            context = context.squeeze()
+
+            optimizer.zero_grad()
+            output = model(target)
+            loss = criterion(output, context)
+            loss.backward()
+            optimizer.step()
+
+            total_loss += loss.item()
+        if (epoch + 1) % 1 == 0:
+            print(f'Epoch {epoch + 1}, Loss: {total_loss / len(dataloader):.4f}')
+
+    model.eval()
+    embeddings = model.embeddings.weight.data.cpu().numpy()
+
+    torch.save(model.state_dict(), '../weight/word2vec_all.pth')
+    print("Model saved.")
+
+    print("\nTesting with nearest words:")
+    embeddings = model.get_embeddings()
+    print(embeddings.shape)
+    test_words = ['as', 'serious', 'justice']
+    for word in test_words:
+        if word in word_to_idx:
+            nearest = find_nearest(word, embeddings, word_to_idx, idx_to_word, k=5)
+            print(f"Nearest to '{word}': {nearest}")
+        else:
+            print(f"'{word}' not found in the vocabulary.")
