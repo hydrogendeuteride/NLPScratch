@@ -1,5 +1,5 @@
 from RNN import *
-from utils import *
+from utils.utils import *
 
 
 def evaluate_rnn_accuracy(model, idx_to_tag, word_to_idx, test_file):

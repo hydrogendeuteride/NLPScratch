@@ -1,6 +1,6 @@
 from HMM.hmm import replace_quotes, custom_split
 from LSTM import *
-from utils import *
+from utils.utils import *
 import argparse
 
 

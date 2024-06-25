@@ -1,9 +1,8 @@
 from transformer import *
-from train import *
-from utils import *
-import time
+from utils.train import *
+from utils.utils import *
 import numpy as np
-from torch_skipgram import SkipGram, SkipGramDataset
+from SkipGram.torch_skipgram import SkipGram
 import torch
 import os
 

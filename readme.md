@@ -1,13 +1,65 @@
-# Hidden Markov Model POS tagging
+# Natural Language Processing from scratch
 
-for school homework.
+This repository contains implementations of various models for 
+Part-of-Speech (POS) tagging, as part of a school NLP assignment. The models implemented are:
 
-match.py is incomplete and this code may not work in some circumstances(mostly because of unsupervised learning's convergence threshold)
+- Hidden Markov Model (HMM)
+- Recurrent Neural Network (RNN)
+- Long Short-Term Memory (LSTM)
+- Transformer (next word prediction)
 
-I 'll update this issue later.
+## Contents
+- [Project structure](#project-structure-)
+- [Models Implemented](#models-implemented)
+  - [HMM](#HMM)
+  - [RNN](#RNN)
+  - [LSTM](#LSTM)
+  - [SkipGram](#SkipGram)
+  - [Transformer](#Transformer)
+- [Performance](#performance)
+- [Example Dataset](#example-dataset)
 
-example dataset (tagged, raw):
+## Project Structure 
+- **dataset**
+  - `tagged_train_mini.txt`
+- **HMM**
+  - `hmm.py`
+  - `test.py`
+  - `match.py`
+  - `unsupervised.py`
+- **RNN**
+  - `RNN.py`
+  - `RNN_train.py`
+  - `RNN_eval.py`
+  - `RNN_test.py`
+- **LSTM**
+  - `LSTM.py`
+  - `LSTM_train.py`
+  - `LSTM_test.py`
+  - `LSTM_eval.py`
+- **SkipGram**
+  - `word2vec.py`
+  - `word2vec_train.py`
+  - `torch_skipgram.py`
+- **Transformer**
+  - `transformer.py`
+  - `transformer_train.py`
+- **utils**
+  - `functions.py`
+  - `train.py`
+  - `utils.py`
 
+## Models Implemented
+### HMM
+### RNN
+### LSTM
+### SkipGram
+### Transformer
+
+## Performance
+
+
+## Example Dataset
 ``` tagged_train.txt
 42c027e4ff9730fbb3de84c1af0d2c506e41c3e4::0	LONDON/NNP ,/, England/NNP (/( Reuters/NNP )/) --/: Harry/NNP Potter/NNP star/NN Daniel/NNP Radcliffe/NNP gains/NNS access/NN to/TO a/DT reported/VBN £20/CD million/CD (/( $/$ 41.1/CD million/CD )/) fortune/NN as/IN he/PRP turns/VBZ 18/CD on/IN Monday/NNP ,/, but/CC he/PRP insists/VBZ the/DT money/NN wo/MD n't/RB cast/VB a/DT spell/NN on/IN him/PRP ./.
 42c027e4ff9730fbb3de84c1af0d2c506e41c3e4::1	Daniel/NNP Radcliffe/NNP as/IN Harry/NNP Potter/NNP in/IN ``/`` Harry/NNP Potter/NNP and/CC the/DT Order/NN of/IN the/DT Phoenix/NNP ''/'' To/TO the/DT disappointment/NN of/IN gossip/NN columnists/NNS around/IN the/DT world/NN ,/, the/DT young/JJ actor/NN says/VBZ he/PRP has/VBZ no/DT plans/NNS to/TO fritter/VB his/PRP$ cash/NN away/RB on/IN fast/JJ cars/NNS ,/, drink/NN and/CC celebrity/NN parties/NNS ./.

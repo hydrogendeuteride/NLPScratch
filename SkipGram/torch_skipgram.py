@@ -1,14 +1,12 @@
 import os
 
-from word2vec import *
-from train import *
-from utils import *
-import time
+from utils.utils import *
 import numpy
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
+import cupy
 
 
 def generate_skipgram_pairs(sentences, window_size=2):

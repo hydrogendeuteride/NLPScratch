@@ -1,4 +1,4 @@
-from function import *
+from utils.function import *
 import numpy as np
 import pickle
 

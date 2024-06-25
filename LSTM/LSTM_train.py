@@ -1,6 +1,6 @@
 from LSTM import *
-from train import *
-from utils import *
+from utils.train import *
+from utils.utils import *
 import time
 import numpy as np
 

@@ -1,6 +1,6 @@
 import numpy as np
 
-from function import *
+from utils.function import *
 import pathlib
 import pickle
 
@@ -135,7 +135,7 @@ class Transformer:
     def sgd_step(self, x, y, learning_rate=0.01):
         gradients = self.backward(x, y)
 
-        clip_grads(gradients, 1.0)
+        clip_grads(gradients, 5.0)
 
         self.We -= learning_rate * gradients[0]
         self.Wq -= learning_rate * gradients[1]

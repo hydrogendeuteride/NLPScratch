@@ -1,5 +1,5 @@
 from LSTM import *
-from utils import *
+from utils.utils import *
 
 
 def evaluate_rnn_accuracy(model, idx_to_tag, word_to_idx, test_file):
@@ -33,6 +33,6 @@ word_count = loaded_data['word_count']
 pos_count = loaded_data['pos_count']
 
 model = LSTM(word_dim=word_count, word_embed_dim=8192, tag_dim=pos_count, hidden_dim=256,
-            max_norm=5, params_path='../weight/lstm_model_8k.pkl')
+             max_norm=5, params_path='../weight/lstm_model_8k.pkl')
 
 acc = evaluate_rnn_accuracy(model, idx_to_tag, word_to_idx, test_file='../dataset/tagged_test.txt')
