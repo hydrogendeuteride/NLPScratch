@@ -121,14 +121,14 @@ class Transformer:
             dAttention = dh_norm_mha.dot(self.Wo[l].T)
 
             dV = attention_weights.T.dot(dAttention)
-            dWv[l] = cache['H'][l].T.dot(dV).reshape(8, 512, 64)
+            dWv[l] = cache['H'][l].T.dot(dV).reshape(self.num_heads, self.embed_dim, self.embed_dim // self.num_heads)
 
             dAttention_weights = dAttention.dot(V.T)
             dK = dAttention_weights.T.dot(Q)
-            dWk[l] = H_prev.T.dot(dK).reshape(8, 512, 64)
+            dWk[l] = H_prev.T.dot(dK).reshape(self.num_heads, self.embed_dim, self.embed_dim // self.num_heads)
 
             dQ = dAttention_weights.T.dot(K)
-            dWq[l] = H_prev.T.dot(dQ).reshape(8, 512, 64)
+            dWq[l] = H_prev.T.dot(dQ).reshape(self.num_heads, self.embed_dim, self.embed_dim // self.num_heads)
 
         return [dWe, dWq, dWk, dWv, dWo, dW1, dW2, db1, db2]
 

@@ -1,7 +1,8 @@
 # Natural Language Processing from scratch
 
 This repository contains implementations of various models for 
-Part-of-Speech (POS) tagging, as part of a school NLP assignment. The models implemented are:
+Part-of-Speech (POS) tagging, as part of a school NLP assignment. 
+The models implemented are:
 
 - Hidden Markov Model (HMM)
 - Recurrent Neural Network (RNN)
@@ -51,10 +52,36 @@ Part-of-Speech (POS) tagging, as part of a school NLP assignment. The models imp
 
 ## Models Implemented
 ### HMM
+Hidden Markov Model POS tagging:
+ - **Viterbi tagging**: Implements the Viterbi algorithm for POS tagging (`HMM/hmm.py`)
+ - **Evaluation**: Evaluates the performance of the HMM model (`HMM/test.py`)
+ - **Baum-Welch algorithm**: Implements the Baum-Welch algorithm for unsupervised training (`HMM/unsupervised.py`)
+ - **Baum-Welch evaluation**: Evaluates the Baum-Welch algorithm (incomplete) (`HMM/match.py`)
+
 ### RNN
+Recurrent Neural Network for POS tagging using only numpy and cupy:
+- **RNN implementation**: Core RNN implementation (`RNN/RNN.py`)
+- **Training**: Script for training the RNN model (`RNN/RNN_train.py`)
+- **Testing**: Script for testing the RNN model (`RNN/RNN_test.py`)
+- **Evaluation**: Script for evaluating the RNN model (`RNN/RNN_eval.py`)
+
 ### LSTM
+Long Short Term Memory network for POS tagging using only numpy and cupy:
+- **LSTM implementation**: Core LSTM implementation (`LSTM/LSTM.py`)
+- **Training**: Script for training the LSTM model (`LSTM/LSTM_train.py`)
+- **Testing**: Script for testing the LSTM model (`LSTM/LSTM_test.py`)
+- **Evaluation**: Script for evaluating the LSTM model (`LSTM/LSTM_eval.py`)
+
 ### SkipGram
+Word2vec implementation for training word embeddings used in RNN, LSTM, and Transformer models:
+- **Word2vec numpy implementation**: Core Word2vec implementation using numpy (`SkipGram/word2vec.py`)
+- **Word2vec training**: Script for training Word2vec model (`SkipGram/word2vec_train.py`)
+- **Pytorch fast word2vec**: Faster Word2vec implementation using PyTorch (`SkipGram/torch_skipgram.py`)
+
 ### Transformer
+Transformer model for predicting the next word in a sentence using only numpy and cupy:
+- **Transformer implementation**: Core Transformer implementation (`Transformer/transformer.py`)
+- **Transformer training**: Script for training the Transformer model (`Transformer/transformer_train.py`)
 
 ## Performance
 

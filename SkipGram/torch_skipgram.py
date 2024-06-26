@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader, Dataset
 import cupy
 
 
-def generate_skipgram_pairs(sentences, window_size=2):
+def generate_skipgram_pairs(sentences, window_size=1):
     pairs = []
     for sentence in sentences:
         sentence_length = len(sentence)
@@ -64,7 +64,7 @@ def find_nearest(word, embeddings, word_to_index, index_to_word, k=5):
 
 if __name__ == "__main__":
     data_line = read_file_to_list('../dataset/tagged_train.txt')
-    processed_data_line = reader(data_line[:10000])
+    processed_data_line = reader(data_line[:500])
     pos_cnt, word_cnt = count_word_POS(processed_data_line)
     word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 
@@ -84,10 +84,10 @@ if __name__ == "__main__":
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-    model_path = '../weight/word2vec_all.pth'
-    if os.path.exists(model_path):
-        model.load_state_dict(torch.load(model_path))
-        print("Model loaded for further training.")
+    # model_path = '../weight/word2vec_all.pth'
+    # if os.path.exists(model_path):
+    #     model.load_state_dict(torch.load(model_path))
+    #     print("Model loaded for further training.")
 
     dataset = SkipGramDataset(skipgram_pairs)
     dataloader = DataLoader(dataset, batch_size=64, shuffle=True)

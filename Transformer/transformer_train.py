@@ -30,13 +30,13 @@ def generate_sequence_data(processed_data, word_to_index, max_len):
 
 
 data_line = read_file_to_list('../dataset/tagged_train.txt')
-processed_data_line = reader(data_line[:100])
+processed_data_line = reader(data_line[:500])
 pos_cnt, word_cnt = count_word_POS(processed_data_line)
 word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 
 #####################################################################
 word2vec_model = SkipGram(len(word_to_idx), 512)
-model_path = '../weight/word2vec_100.pth'
+model_path = '../weight/word2vec_all.pth'
 if os.path.exists(model_path):
     word2vec_model.load_state_dict(torch.load(model_path))
     print("Model loaded for further training.")
@@ -51,4 +51,4 @@ model = Transformer(vocab_size=len(word_to_idx), embed_dim=512, num_heads=8, ff_
                     max_len=max_len, embedding_weight=embeddings, use_gpu=True)
 
 model.sgd_step(X_train[3], Y_train[3])
-train_with_sgd(model, X_train, Y_train, learning_rate=0.001, nepoch=10, evaluation_loss_after=1)
+train_with_sgd(model, X_train, Y_train, learning_rate=0.0001, nepoch=10, evaluation_loss_after=1)
