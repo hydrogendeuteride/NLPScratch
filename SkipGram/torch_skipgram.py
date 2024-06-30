@@ -64,7 +64,7 @@ def find_nearest(word, embeddings, word_to_index, index_to_word, k=5):
 
 if __name__ == "__main__":
     data_line = read_file_to_list('../dataset/tagged_train.txt')
-    processed_data_line = reader(data_line[:500])
+    processed_data_line = reader(data_line[:100])
     pos_cnt, word_cnt = count_word_POS(processed_data_line)
     word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 

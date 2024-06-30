@@ -48,7 +48,7 @@ class Transformer:
         H = self.We[x] + self.pe
 
         cache = {'H': [], 'Q': [], 'K': [], 'V': [], 'attention_weights': [], 'relu_input': [],
-                 'attention_output': []}
+                 'attention_output': [], 'H1': []}
 
         for l in range(self.num_layers):
             Q = H.dot(self.Wq[l].reshape(self.embed_dim, self.embed_dim))
@@ -62,11 +62,11 @@ class Transformer:
             attention_output = attention_weights.dot(V)
 
             multi_head_output = attention_output.dot(self.Wo[l])
-            H = layer_norm(H + multi_head_output)
+            H1 = layer_norm(H + multi_head_output)
 
-            relu_input = H.dot(self.W1[l]) + self.b1[l]
+            relu_input = H1.dot(self.W1[l]) + self.b1[l]
             ffn_output = relu(relu_input)
-            H = layer_norm(H + ffn_output.dot(self.W2[l]) + self.b2[l])
+            H = layer_norm(H1 + ffn_output.dot(self.W2[l]) + self.b2[l])
 
             cache['H'].append(H)
             cache['Q'].append(Q)
@@ -75,6 +75,7 @@ class Transformer:
             cache['attention_weights'].append(attention_weights)
             cache['relu_input'].append(relu_input)
             cache['attention_output'].append(attention_output)
+            cache['H1'].append(H1)
 
         O = softmax(H.dot(self.We.T))
         return O, H, cache
@@ -104,13 +105,14 @@ class Transformer:
             attention_weights = cache['attention_weights'][l]
             H_prev = cache['H'][l - 1] if l > 0 else self.We[x]
 
-            dH_norm_ffn = layer_norm_backward(1 + dH, cache['H'][l])
+            dH_norm_ffn = layer_norm_backward(1 + dH, cache['H'][
+                l])  # H = layer_norm(H + ffn_output.dot(self.W2[l]) + self.b2[l])
             dFFN = relu_backward(dH_norm_ffn.dot(self.W2[l].T), cache['relu_input'][l])
             dW2[l] = cache['relu_input'][l].T.dot(dH_norm_ffn)
             db2[l] = dH_norm_ffn.sum(axis=0)
 
-            dFFN_input = dFFN.dot(self.W1[l].T)
-            dW1[l] = H_prev.T.dot(dFFN)
+            dFFN_input = dFFN.dot(self.W1[l].T)  # relu_input = H.dot(self.W1[l]) + self.b1[l]
+            dW1[l] = cache['H1'][l].T.dot(dFFN)  # wrong?
             db1[l] = dFFN.sum(axis=0)
 
             dH = dFFN_input
@@ -121,7 +123,7 @@ class Transformer:
             dAttention = dh_norm_mha.dot(self.Wo[l].T)
 
             dV = attention_weights.T.dot(dAttention)
-            dWv[l] = cache['H'][l].T.dot(dV).reshape(self.num_heads, self.embed_dim, self.embed_dim // self.num_heads)
+            dWv[l] = H_prev.T.dot(dV).reshape(self.num_heads, self.embed_dim, self.embed_dim // self.num_heads)
 
             dAttention_weights = dAttention.dot(V.T)
             dK = dAttention_weights.T.dot(Q)
@@ -208,4 +210,3 @@ def positional_encoding(max_len, embed_dim, np_module):
     pe[:, 0::2] = np_module.sin(position * div_term)
     pe[:, 1::2] = np_module.cos(position * div_term)
     return pe.astype(np_module.float32)
-
