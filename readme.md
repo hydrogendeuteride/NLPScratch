@@ -1,4 +1,4 @@
-# Natural Language Processing from scratch
+# Natural Language Processing From Scratch
 
 This repository contains implementations of various models for 
 Part-of-Speech (POS) tagging, as part of a school NLP assignment. 

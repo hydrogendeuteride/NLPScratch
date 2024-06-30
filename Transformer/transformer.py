@@ -104,7 +104,7 @@ class Transformer:
             attention_weights = cache['attention_weights'][l]
             H_prev = cache['H'][l - 1] if l > 0 else self.We[x]
 
-            dH_norm_ffn = layer_norm_backward(dH, cache['H'][l])
+            dH_norm_ffn = layer_norm_backward(1 + dH, cache['H'][l])
             dFFN = relu_backward(dH_norm_ffn.dot(self.W2[l].T), cache['relu_input'][l])
             dW2[l] = cache['relu_input'][l].T.dot(dH_norm_ffn)
             db2[l] = dH_norm_ffn.sum(axis=0)
@@ -115,7 +115,7 @@ class Transformer:
 
             dH = dFFN_input
 
-            dh_norm_mha = layer_norm_backward(dH, cache['H'][l])
+            dh_norm_mha = layer_norm_backward(1 + dH, cache['H'][l])
             dWo[l] = cache['attention_output'][l].T.dot(dh_norm_mha)
 
             dAttention = dh_norm_mha.dot(self.Wo[l].T)
