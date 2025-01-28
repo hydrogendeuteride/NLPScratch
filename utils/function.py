@@ -8,38 +8,34 @@ except ImportError:
     default_library = 'numpy'
 
 
-def softmax(x):
+def softmax(x, axis=-1):
     np = cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy
 
-    if x.ndim == 2:
-        x = x - np.max(x, axis=1, keepdims=True)
-        x_exp = np.exp(x)
-        x_sum = np.sum(x_exp, axis=1, keepdims=True)
-        return x_exp / x_sum
-    else:
-        x = x - np.max(x)
-        x_exp = np.exp(x)
-        x_sum = np.sum(x_exp)
-        return x_exp / x_sum
+    max_val = np.max(x, axis=axis, keepdims=True)
+    x_exp = np.exp(x - max_val)
+    sum_exp = np.sum(x_exp, axis=axis, keepdims=True)
+    return x_exp / sum_exp
 
 
 def sigmoid(x):
     np = cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy
 
-    return 1.0 / (1.0 + np.exp(-x))
+    x_clipped = np.clip(x, -500, 500)
+    return 1.0 / (1.0 + np.exp(-x_clipped))
 
 
 def clip_grads(gradients, max_norm):
-    np = cupy.get_array_module(gradients) if 'cupy' in str(type(gradients)) else numpy
+    if not gradients:
+        return
 
-    total_norm = 0
-    for grad in gradients:
-        total_norm += np.sum(np.square(grad))
-    total_norm = np.sqrt(total_norm)
+    np = cupy.get_array_module(gradients[0]) if 'cupy' in str(type(gradients[0])) else numpy
 
-    if total_norm + 1e-6 > max_norm:
-        for i in range(len(gradients)):
-            gradients[i] *= max_norm / total_norm
+    total_norm = np.sqrt(sum(np.sum(np.square(g)) for g in gradients))
+
+    if total_norm > max_norm:
+        scale = max_norm / (total_norm + 1e-6)
+        for g in gradients:
+            g *= scale
 
 
 def relu(x):
@@ -60,13 +56,35 @@ def relu_backward(dout, x):
     return dx
 
 
-def layer_norm_backward(dout, x, eps=1e-6):
-    np = cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy
-    mean = np.mean(x, axis=-1, keepdims=True)
-    std = np.std(x, axis=-1, keepdims=True)
-    N, D = x.shape
-    dx_normalized = dout / (std + eps)
-    dmean = np.sum(dout * -1 / (std + eps), axis=-1, keepdims=True)
-    dstd = np.sum(dout * (x - mean) * -1 / (std + eps)**2, axis=-1, keepdims=True)
-    dx = dx_normalized + dmean / N + dstd * 2 * (x - mean) / N
+def softmax_backward(dout, softmax_output, axis=-1):
+    np = cupy.get_array_module(dout) if 'cupy' in str(type(dout)) else numpy
+
+    sum_dout = np.sum(dout * softmax_output, axis=axis, keepdims=True)
+
+    dx = softmax_output * (dout - sum_dout)
     return dx
+
+
+def layer_norm_backward(dout, x, eps=1e-5):
+    # x, dout shape = (..., D)
+    # LayerNorm은 마지막 차원 D에 대해 mean/var 계산
+    np = cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy
+
+    mean = np.mean(x, axis=-1, keepdims=True)  # shape (..., 1)
+    var = np.var(x, axis=-1, keepdims=True)  # shape (..., 1)
+    std = np.sqrt(var + eps)  # shape (..., 1)
+    D = x.shape[-1]
+
+    # dout_sum = \sum_j dout_ij
+    dout_sum = np.sum(dout, axis=-1, keepdims=True)  # shape (..., 1)
+    # dxmu_sum = \sum_j dout_ij*(x_ij - mu_i)
+    dxmu_sum = np.sum(dout * (x - mean), axis=-1, keepdims=True)
+
+    # 최종 식
+    dx = (1. / std) * (
+            dout
+            - dout_sum / D
+            - (x - mean) * dxmu_sum / ((var + eps) * D)
+    )
+    return dx
+
