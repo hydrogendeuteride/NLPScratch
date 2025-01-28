@@ -1,174 +1,153 @@
 import os
-import math
+from collections import deque, Counter
 import random
+from utils.utils import *
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
-from collections import Counter
-from utils.utils import *
+import torch.optim as optim
+from torch.utils.data import DataLoader, Dataset
+import cupy
 
 
-class TextProcessor:
-    def __init__(self, min_count=5, window_size=5, neg_sample_size=5, subsample_t=1e-5):
-        self.min_count = min_count
-        self.window_size = window_size
-        self.neg_sample_size = neg_sample_size
-        self.subsample_t = subsample_t
+def subsample_sentences(sentences, word_counts, t=1e-5):
+    total_words = sum(word_counts.values())
+    word_probs = {}
+    for word, count in word_counts.items():
+        freq = count / total_words
+        keep_prob = (np.sqrt(freq / t) + 1) * (t / freq) if freq > t else 1.0
+        word_probs[word] = min(keep_prob, 1.0)
 
-    def process(self, raw_sentences):
-        word_counts = Counter(word for sent in raw_sentences for word in sent)
-        self.word_counts = {w: c for w, c in word_counts.items() if c >= self.min_count}
-        self.vocab = list(self.word_counts.keys())
-        self.word2idx = {w: i for i, w in enumerate(self.vocab)}
-        self.idx2word = {i: w for i, w in enumerate(self.vocab)}
+    filtered = [
+        [word for word in sent if random.random() < word_probs.get(word, 1.0)]
+        for sent in sentences
+    ]
+    return [sent for sent in filtered if len(sent) >= 2]
 
-        total_words = sum(self.word_counts.values())
-        self.word_probs = {w: 1 - math.sqrt(self.subsample_t / (c / total_words))
-                           for w, c in self.word_counts.items()}
 
-        self.sentences = [
-            [w for w in sent if w in self.word_counts and random.random() > self.word_probs[w]]
-            for sent in raw_sentences
-        ]
-        return self.sentences
+def generate_skipgram_pairs(sentences, window_size=3):
+    pairs = []
+    for sentence in sentences:
+        sentence_length = len(sentence)
+        for i, target in enumerate(sentence):
+            for j in range(max(0, i - window_size), min(sentence_length, i + window_size + 1)):
+                if i != j:
+                    context = sentence[j]
+                    pairs.append((target, context))
+    return pairs
 
 
 class SkipGramDataset(Dataset):
-    def __init__(self, sentences, processor):
-        self.processor = processor
-        self.data = []
-
-        for sentence in sentences:
-            for i in range(len(sentence)):
-                target = sentence[i]
-                window = random.randint(1, processor.window_size)
-                start = max(0, i - window)
-                end = min(len(sentence), i + window + 1)
-                context_words = [sentence[j] for j in range(start, end) if j != i]
-
-                for context in context_words:
-                    self.data.append((
-                        self.processor.word2idx[target],
-                        self.processor.word2idx[context]
-                    ))
-
-        word_counts = np.array(list(processor.word_counts.values()))
-        self.neg_dist = torch.from_numpy(word_counts ** 0.75).float()
-        self.neg_dist /= self.neg_dist.sum()
+    def __init__(self, data):
+        self.targets, self.contexts = zip(*data)
 
     def __len__(self):
-        return len(self.data)
+        return len(self.targets)
 
     def __getitem__(self, idx):
-        target, context = self.data[idx]
-        negatives = torch.multinomial(self.neg_dist, self.processor.neg_sample_size, True)
-        return torch.LongTensor([target]), torch.LongTensor([context]), negatives
+        target = torch.LongTensor([self.targets[idx]])
+        context = torch.LongTensor([self.contexts[idx]])
+        return target, context
 
 
-class SkipGramNS(nn.Module):
-    def __init__(self, vocab_size, emb_dim):
-        super().__init__()
-        self.target_emb = nn.Embedding(vocab_size, emb_dim)
-        self.context_emb = nn.Embedding(vocab_size, emb_dim)
-        self.init_emb()
+class SkipGram(nn.Module):
+    def __init__(self, vocab_size, embedding_dim):
+        super(SkipGram, self).__init__()
+        self.embeddings = nn.Embedding(vocab_size, embedding_dim, max_norm=1.0)
+        self.output_layer = nn.Sequential(
+            nn.Linear(embedding_dim, vocab_size),
+            nn.LogSoftmax(dim=-1)
+        )
 
-    def init_emb(self):
-        range_val = 0.5 / self.target_emb.weight.size(1)
-        nn.init.uniform_(self.target_emb.weight, -range_val, range_val)
-        nn.init.constant_(self.context_emb.weight, 0)
-
-    def forward(self, target, context, negatives):
-        # 양성 샘플 계산
-        target_emb = self.target_emb(target).squeeze()
-        context_emb = self.context_emb(context).squeeze()
-        pos_score = torch.mul(target_emb, context_emb).sum(dim=1)
-        pos_loss = F.logsigmoid(pos_score)
-
-        neg_emb = self.context_emb(negatives).neg()
-        neg_score = torch.bmm(neg_emb, target_emb.unsqueeze(2)).squeeze()
-        neg_loss = F.logsigmoid(neg_score).sum(dim=1)
-
-        return -(pos_loss + neg_loss).mean()
+    def forward(self, target):
+        embed = self.embeddings(target)
+        out = self.output_layer(embed)
+        return out
 
     def get_embeddings(self):
-        return self.target_emb.weight.data.cpu().numpy()
+        return self.embeddings.weight.data.cpu().numpy()
 
+def find_nearest(word, embeddings, word_to_index, index_to_word, k=5):
+    npy = cupy.get_array_module(embeddings) if 'cupy' in str(type(embeddings)) else np
 
-def train_model(sentences, device='cuda'):
-    processor = TextProcessor(min_count=5, window_size=5)
-    processed = processor.process(sentences)
+    if word not in word_to_index:
+        return "Word not in dictionary."
 
-    dataset = SkipGramDataset(processed, processor)
-    dataloader = DataLoader(dataset, batch_size=1024, shuffle=True)
+    vec = embeddings[word_to_index[word]]
+    similarity = npy.dot(embeddings, vec)
+    norms = npy.linalg.norm(embeddings, axis=1) * npy.linalg.norm(vec)
+    similarity /= norms
 
-    model = SkipGramNS(len(processor.vocab), 300).to(device)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.025)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(dataloader))
-
-    for epoch in range(20):
-        model.train()
-        total_loss = 0
-
-        for targets, contexts, negatives in dataloader:
-            targets = targets.to(device)
-            contexts = contexts.to(device)
-            negatives = negatives.to(device)
-
-            optimizer.zero_grad()
-            loss = model(targets, contexts, negatives)
-            loss.backward()
-
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step()
-            scheduler.step()
-
-            total_loss += loss.item()
-
-        if (epoch + 1) % 5 == 0:
-            test_words = ['king', 'woman', 'quick']
-            embeddings = model.get_embeddings()
-            embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
-
-            for word in test_words:
-                if word in processor.word2idx:
-                    idx = processor.word2idx[word]
-                    sim = np.dot(embeddings, embeddings[idx])
-                    nearest = np.argsort(-sim)[1:6]
-                    print(f"{word}: {[processor.idx2word[i] for i in nearest]}")
-
-        print(f'Epoch {epoch + 1}, Loss: {total_loss / len(dataloader):.4f}')
-
-    return model, processor
-
-
-def get_similarity_matrix(embeddings, word2idx, top_n=10):
-    norms = np.linalg.norm(embeddings, axis=1)
-    normalized = embeddings / norms[:, None]
-    sim_matrix = np.dot(normalized, normalized.T)
-
-    similar_words = {}
-    for word, idx in word2idx.items():
-        nearest = np.argsort(-sim_matrix[idx])[1:top_n + 1]
-        similar_words[word] = [(word2idx[i], sim_matrix[idx][i]) for i in nearest]
-
-    return similar_words
-
+    nearest = npy.argsort(-similarity)[1:k + 1]
+    nearest_words = [index_to_word[int(idx)] for idx in nearest.flatten()]
+    return nearest_words
 
 if __name__ == "__main__":
     data_line = read_file_to_list('../dataset/tagged_train.txt')
-    processed_data = reader(data_line)
+    processed_data_line = reader(data_line)
+    pos_cnt, word_cnt = count_word_POS(processed_data_line)
+    word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 
-    trained_model, processor = train_model(processed_data)
+    x1, y1 = text_to_indices(processed_data_line, word_to_idx, tag_to_idx)
+    idx_to_tag = build_reverse_tag_index(tag_to_idx)
+    idx_to_word = {idx: word for word, idx in word_to_idx.items()}
 
-    embeddings = trained_model.get_embeddings()
-    np.save('../weights/word2vec_embeddings.npy', embeddings)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # skipgram_pairs = generate_skipgram_pairs(x1)
 
-    test_words = ['king', 'woman', 'justice']
+    word_counts = Counter(word for sentence in x1 for word in sentence)
+    filtered_x1 = subsample_sentences(x1, word_counts)
+    skipgram_pairs = generate_skipgram_pairs(filtered_x1)
+
+    print("fin")
+
+    embedding_dim = 256
+    learning_rate = 0.003
+    epochs = 50
+
+    model = SkipGram(len(word_to_idx), embedding_dim).to(device)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+    # model_path = '../weight/word2vec_all.pth'
+    # if os.path.exists(model_path):
+    #     model.load_state_dict(torch.load(model_path))
+    #     print("Model loaded for further training.")
+
+    dataset = SkipGramDataset(skipgram_pairs)
+    dataloader = DataLoader(dataset, batch_size=256, shuffle=True)
+
+    for epoch in range(epochs):
+        total_loss = 0
+        for data in dataloader:
+            target, context = data
+            target, context = target.to(device), context.to(device)
+            target = target.squeeze()
+            context = context.squeeze()
+
+            optimizer.zero_grad()
+            output = model(target)
+            loss = criterion(output, context)
+            loss.backward()
+            optimizer.step()
+
+            total_loss += loss.item()
+        if (epoch + 1) % 1 == 0:
+            print(f'Epoch {epoch + 1}, Loss: {total_loss / len(dataloader):.4f}')
+
+    model.eval()
+    embeddings = model.embeddings.weight.data.cpu().numpy()
+
+    torch.save(model.state_dict(), '../weight/word2vec_all.pth')
+    print("Model saved.")
+
+    print("\nTesting with nearest words:")
+    embeddings = model.get_embeddings()
+    print(embeddings.shape)
+    test_words = ['as', 'serious', 'justice']
     for word in test_words:
-        if word in processor.word2idx:
-            idx = processor.word2idx[word]
-            sim = np.dot(embeddings, embeddings[idx])
-            nearest = np.argsort(-sim)[1:6]
-            print(f"Nearest to '{word}': {[processor.idx2word[i] for i in nearest]}")
+        if word in word_to_idx:
+            nearest = find_nearest(word, embeddings, word_to_idx, idx_to_word, k=5)
+            print(f"Nearest to '{word}': {nearest}")
+        else:
+            print(f"'{word}' not found in the vocabulary.")
