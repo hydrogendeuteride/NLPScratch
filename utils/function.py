@@ -67,7 +67,6 @@ def softmax_backward(dout, softmax_output, axis=-1):
 
 def layer_norm_backward(dout, x, eps=1e-5):
     # x, dout shape = (..., D)
-    # LayerNorm은 마지막 차원 D에 대해 mean/var 계산
     np = cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy
 
     mean = np.mean(x, axis=-1, keepdims=True)  # shape (..., 1)
@@ -80,11 +79,9 @@ def layer_norm_backward(dout, x, eps=1e-5):
     # dxmu_sum = \sum_j dout_ij*(x_ij - mu_i)
     dxmu_sum = np.sum(dout * (x - mean), axis=-1, keepdims=True)
 
-    # 최종 식
     dx = (1. / std) * (
             dout
             - dout_sum / D
             - (x - mean) * dxmu_sum / ((var + eps) * D)
     )
     return dx
-

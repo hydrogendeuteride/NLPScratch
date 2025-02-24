@@ -22,7 +22,7 @@ class Transformer:
         if embedding_weight is None:
             self.We = lecun_init((self.vocab_size, self.embed_dim), self.embed_dim, self.np)
         else:
-            self.We = self.np.array(embedding_weight) if self.use_gpu else embedding_weight
+            self.We = self.np.array(embedding_weight)
 
         self.Wq = lecun_init((self.num_layers, self.embed_dim, self.embed_dim),
                              self.embed_dim, self.np)
@@ -39,7 +39,7 @@ class Transformer:
         self.b1 = self.np.zeros((self.num_layers, self.ff_dim)).astype(self.np.float32)
         self.b2 = self.np.zeros((self.num_layers, self.embed_dim)).astype(self.np.float32)
 
-        self.W_vocab = lecun_init((embed_dim, vocab_size), fan_in=embed_dim)
+        self.W_vocab = lecun_init((embed_dim, vocab_size), fan_in=embed_dim, lib=self.np)
         self.b_vocab = self.np.zeros((vocab_size,), dtype=self.np.float32)
 
         self.pe = positional_encoding(self.max_len, self.embed_dim, self.np)
@@ -51,7 +51,7 @@ class Transformer:
         H = self.We[x] + self.pe[:S]  # (B, S, E)
 
         padding_mask = create_padding_mask(x, lib=self.np)  # (B, 1, 1, S)
-        look_ahead = create_look_ahead_mask(S)  # (1, 1, S, S)
+        look_ahead = create_look_ahead_mask(S, lib=self.np)  # (1, 1, S, S)
         combined_mask = look_ahead + padding_mask  # (B, 1, S, S)
 
         layers_cache = []
@@ -307,7 +307,8 @@ def create_look_ahead_mask(size, lib=np):
     """
        return: shape (1, 1, s, s)
     """
-    return lib.triu(lib.ones((1, 1, size, size)), k=1).astype('float32') * -1e9
+    mask = lib.triu(lib.ones((1, 1, size, size), dtype='float32'), k=1) * -1e9
+    return mask
 
 
 def positional_encoding(max_len, embed_dim, np_module):
