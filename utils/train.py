@@ -27,7 +27,7 @@ def train_with_sgd(model, x_train, y_train, learning_rate=0.01, nepoch=100, eval
     print(f"Training completed in {total_time:.2f} sec")
 
 
-def train_transformer(model, x_train, y_train, learning_rate=0.01, nepoch=100, evaluation_loss_after=5, batch_size=32):
+def train_transformer(model, x_train, y_train, learning_rate=0.01, nepoch=100, evaluation_loss_after=5, batch_size=1):
     np_backend = model.np
     losses = []
     num_examples = 0

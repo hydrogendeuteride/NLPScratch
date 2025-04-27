@@ -52,7 +52,7 @@ class Transformer:
 
         padding_mask = create_padding_mask(x, lib=self.np)  # (B, 1, 1, S)
         look_ahead = create_look_ahead_mask(S, lib=self.np)  # (1, 1, S, S)
-        combined_mask = look_ahead + padding_mask  # (B, 1, S, S)
+        combined_mask = self.np.maximum(look_ahead, padding_mask)  # (B, 1, S, S)
 
         layers_cache = []
 
@@ -158,7 +158,7 @@ class Transformer:
 
             d_ffn_out = d_residual_in  # (B, S, E)
 
-            gradients['W2'][l] += self.np.einsum('bse,bsf->ef', ffn_hidden, d_ffn_out)
+            gradients['W2'][l] += self.np.einsum('bsf,bse->fe', ffn_hidden, d_ffn_out)
             gradients['b2'][l] += self.np.sum(d_ffn_out, axis=(0, 1))
 
             d_ffn_hidden = d_ffn_out @ self.W2[l].T  # (B, S, ff_dim)
@@ -210,6 +210,10 @@ class Transformer:
             dK = dK_4d.transpose(0, 2, 1, 3).reshape(B, S, self.embed_dim)
             dV = dV_4d.transpose(0, 2, 1, 3).reshape(B, S, self.embed_dim)
 
+            gradients['Wq'][l] += self.np.einsum('bse,bsE->eE', attn_input, dQ)
+            gradients['Wk'][l] += self.np.einsum('bse,bsE->eE', attn_input, dK)
+            gradients['Wv'][l] += self.np.einsum('bse,bsE->eE', attn_input, dV)
+
             d_attn_input = (dQ @ self.Wq[l].T) + (dK @ self.Wk[l].T) + (dV @ self.Wv[l].T)
 
             dH = d_attn_input + d_attn_res_in
@@ -246,7 +250,7 @@ class Transformer:
 
         B, S, V = logits.shape
 
-        max_log = self.np.max(logits, axis=1, keepdims=True)
+        max_log = logits.max(axis=-1, keepdims=True)
         x_shift = logits - max_log
         exp_x = self.np.exp(x_shift)
         sum_exp = self.np.sum(exp_x, axis=-1, keepdims=True)
@@ -295,7 +299,10 @@ def create_padding_mask(x, pad_token=0, lib=np):
     x: (B, S)
     return: shape (B, 1, 1, S)
     """
-    return (x == pad_token)[:, lib.newaxis, lib.newaxis, :].astype('float32')
+    mask = (x == pad_token).astype(lib.float32)
+    mask = mask[:, lib.newaxis, lib.newaxis, :]  # (B,1,1,S)
+    mask *= -1e9
+    return mask
 
 
 def lecun_init(shape, fan_in, lib=np):
