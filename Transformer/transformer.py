@@ -7,7 +7,7 @@ import pickle
 
 class Transformer:
     def __init__(self, vocab_size, embed_dim, num_heads, ff_dim, num_layers, max_len,
-                 embedding_weight=None, use_gpu=False, dropout_p=0.1, use_adam=True):
+                 embedding_weight=None, use_gpu=False, dropout_p=0.1, use_adam=True, enable_tf32=True):
         self.use_gpu = use_gpu and (default_library == 'cupy')
         self.np = cupy if self.use_gpu else numpy
 
@@ -65,6 +65,19 @@ class Transformer:
         # Adam state containers
         if self.use_adam:
             self._init_adam_states()
+
+        # Try to enable TF32 on CuPy/cuBLAS for faster matmuls
+        if self.use_gpu and enable_tf32:
+            try:
+                # Set cuBLAS math mode to TF32 tensor ops if available
+                h = cupy.cuda.device.get_cublas_handle()
+                cupy.cuda.cublas.setMathMode(h, cupy.cuda.cublas.CUBLAS_TF32_TENSOR_OP_MATH)  # CUDA 11+
+            except Exception:
+                try:
+                    # Some versions expose allow_tf32 flag
+                    cupy.cuda.matmul.allow_tf32 = True
+                except Exception:
+                    pass
 
     def _init_adam_states(self):
         npb = self.np

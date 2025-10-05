@@ -31,16 +31,26 @@ def generate_sequence_data(processed_data, word_to_index, max_len):
 
 
 data_line = read_file_to_list('../dataset/tagged_train.txt')
-processed_data_line = reader(data_line[:10000])
+processed_data_line = reader(data_line)
 pos_cnt, word_cnt = count_word_POS(processed_data_line)
 word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 
 #####################################################################
-word2vec_model = SkipGram(len(word_to_idx),256)
+word2vec_model = SkipGram(len(word_to_idx), 256)
 model_path = '../weight/word2vec_all.pth'
 if os.path.exists(model_path):
-    word2vec_model.load_state_dict(torch.load(model_path))
-    print("Model loaded for further training.")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    state = torch.load(model_path, map_location=device)
+    # Map legacy keys if needed
+    if 'embeddings.weight' in state and 'input.weight' not in state:
+        state['input.weight'] = state['embeddings.weight']
+    try:
+        res = word2vec_model.load_state_dict(state, strict=False)
+        print("Loaded word2vec checkpoint.",
+              "missing:", getattr(res, 'missing_keys', None),
+              "unexpected:", getattr(res, 'unexpected_keys', None))
+    except Exception:
+        print("Loaded word2vec checkpoint with relaxed mapping.")
 
 embeddings = word2vec_model.get_embeddings()
 #####################################################################
@@ -48,7 +58,7 @@ embeddings = word2vec_model.get_embeddings()
 max_len = 320
 
 X_train, Y_train = generate_sequence_data(processed_data_line, word_to_idx, max_len)
-model = Transformer(vocab_size=len(word_to_idx), embed_dim=256, num_heads=8, ff_dim=2048, num_layers=3,
+model = Transformer(vocab_size=len(word_to_idx), embed_dim=256, num_heads=8, ff_dim=1024, num_layers=3,
                     max_len=max_len, embedding_weight=embeddings, use_gpu=True)
 
 # Build reverse map for qualitative samples
@@ -75,3 +85,5 @@ train_transformer(
     sample_prompts=sample_prompts,
     topk=5,
 )
+
+model.save('transformer_model.pth')
