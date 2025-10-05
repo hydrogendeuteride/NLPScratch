@@ -107,7 +107,7 @@ class Transformer:
         mask = (self.np.random.random(x.shape) < keep).astype(self.np.float32)
         return x * mask / keep, mask
 
-    def forward(self, x):
+    def forward(self, x, return_hidden_only=False):
         # x : (B, S)
         B, S = x.shape
 
@@ -183,6 +183,14 @@ class Transformer:
             layers_cache.append(layer_c)
             H = H_new
 
+        if return_hidden_only:
+            cache = {
+                'x': x,
+                'H_final': H,
+                'layers': layers_cache
+            }
+            return H, cache
+
         logits = H @ self.W_vocab + self.b_vocab  # (B, S, vocab_size)
 
         cache = {
@@ -192,6 +200,135 @@ class Transformer:
         }
 
         return logits, cache
+
+    def backward_last_token(self, cache, t_index, dlogits_last):
+        """
+        Memory-efficient backward pass for last-token-only loss.
+        t_index: (B,) indices of last real token per sequence
+        dlogits_last: (B, V)
+        """
+        B = t_index.shape[0]
+        V = dlogits_last.shape[1]
+        E = self.embed_dim
+
+        gradients = {
+            'We': self.np.zeros_like(self.We),
+            'Wq': self.np.zeros_like(self.Wq),
+            'Wk': self.np.zeros_like(self.Wk),
+            'Wv': self.np.zeros_like(self.Wv),
+            'Wo': self.np.zeros_like(self.Wo),
+            'W1': self.np.zeros_like(self.W1),
+            'W2': self.np.zeros_like(self.W2),
+            'b1': self.np.zeros_like(self.b1),
+            'b2': self.np.zeros_like(self.b2),
+            'W_vocab': self.np.zeros_like(self.W_vocab),
+            'b_vocab': self.np.zeros_like(self.b_vocab),
+            'ln1_gamma': self.np.zeros_like(self.ln1_gamma),
+            'ln1_beta': self.np.zeros_like(self.ln1_beta),
+            'ln2_gamma': self.np.zeros_like(self.ln2_gamma),
+            'ln2_beta': self.np.zeros_like(self.ln2_beta),
+        }
+
+        H_final = cache['H_final']  # (B, S, E)
+        S = H_final.shape[1]
+        idx = self.np.arange(B)
+        H_last = H_final[idx, t_index, :]  # (B, E)
+
+        # Vocab head grads
+        gradients['W_vocab'] += H_last.T @ dlogits_last  # (E,V)
+        gradients['b_vocab'] += self.np.sum(dlogits_last, axis=0)
+
+        # Gradient to H, only last positions
+        dH = self.np.zeros_like(H_final)
+        dH[idx, t_index, :] = dlogits_last @ self.W_vocab.T  # (B,E)
+
+        # Backward through encoder stack (same as backward, starting from dH)
+        layers = cache['layers']
+        for l in reversed(range(self.num_layers)):
+            layer_c = layers[l]
+
+            ffn_input = layer_c['ffn_input']  # (B, S, E)
+            ffn_out = layer_c['ffn_out']  # (B, S ,E)
+            ffn_hidden = layer_c['ffn_hidden']  # (B, S, ff_dim)
+
+            # LN2 backward
+            d_residual_in, d_ln2_gamma, d_ln2_beta = layer_norm_affine_backward(dH, layer_c['ln2'])
+            gradients['ln2_gamma'][l] += d_ln2_gamma
+            gradients['ln2_beta'][l] += d_ln2_beta
+
+            d_ffn_out = d_residual_in
+            if layer_c['drop_ffn'] is not None:
+                keep = 1.0 - self.dropout_p
+                d_ffn_out = d_ffn_out * layer_c['drop_ffn'] / keep
+
+            # FFN grads
+            gradients['W2'][l] += (ffn_hidden.reshape(-1, self.ff_dim).T @
+                                   d_ffn_out.reshape(-1, self.embed_dim))
+            gradients['b2'][l] += self.np.sum(d_ffn_out, axis=(0, 1))
+
+            d_ffn_hidden = d_ffn_out @ self.W2[l].T
+            z = ffn_input @ self.W1[l] + self.b1[l]
+            dz = relu_backward(d_ffn_hidden, z)
+            gradients['W1'][l] += (ffn_input.reshape(-1, self.embed_dim).T @
+                                   dz.reshape(-1, self.ff_dim))
+            gradients['b1'][l] += self.np.sum(dz, axis=(0, 1))
+
+            d_ffn_input = dz @ self.W1[l].T
+            dH_attn_out = d_residual_in
+            dH = d_ffn_input + dH_attn_out
+
+            # Attention block
+            attn_input = layer_c['attn_input']
+            attn_out = layer_c['attn_out']
+            attn_out_4d = layer_c['attn_out_beforeWo']
+            attn_weights = layer_c['attn_weights']
+            scores = layer_c['scores']
+            Q_4d = layer_c['Q']
+            K_4d = layer_c['K']
+            V_4d = layer_c['V']
+
+            d_attn_res_in, d_ln1_gamma, d_ln1_beta = layer_norm_affine_backward(dH, layer_c['ln1'])
+            gradients['ln1_gamma'][l] += d_ln1_gamma
+            gradients['ln1_beta'][l] += d_ln1_beta
+            d_attn_out = d_attn_res_in
+            if layer_c['drop_attn'] is not None:
+                keep = 1.0 - self.dropout_p
+                d_attn_out = d_attn_out * layer_c['drop_attn'] / keep
+
+            dWo_in = d_attn_out
+            attn_out_noWo_2d = attn_out_4d.transpose(0, 2, 1, 3).reshape(B * S, self.embed_dim)
+            dWo_in_2d = dWo_in.reshape(B * S, self.embed_dim)
+            gradients['Wo'][l] += attn_out_noWo_2d.T @ dWo_in_2d
+
+            d_attn_out_noWo_2d = dWo_in_2d @ self.Wo[l].T
+            d_attn_out_noWo_4d = d_attn_out_noWo_2d.reshape(B, S, self.num_heads, self.head_dim).transpose(0, 2, 1, 3)
+            d_attn_weight = d_attn_out_noWo_4d @ V_4d.transpose(0, 1, 3, 2)
+            dV_4d = attn_weights.transpose(0, 1, 3, 2) @ d_attn_out_noWo_4d
+            d_attn_score = softmax_backward(d_attn_weight, attn_weights)
+
+            scale = 1.0 / self.np.sqrt(self.head_dim)
+            dQ_4d = scale * (d_attn_score @ K_4d)
+            dK_4d = scale * (d_attn_score.transpose(0, 1, 3, 2) @ Q_4d)
+
+            dQ = dQ_4d.transpose(0, 2, 1, 3).reshape(B, S, self.embed_dim)
+            dK = dK_4d.transpose(0, 2, 1, 3).reshape(B, S, self.embed_dim)
+            dV = dV_4d.transpose(0, 2, 1, 3).reshape(B, S, self.embed_dim)
+
+            X2d = attn_input.reshape(-1, self.embed_dim)
+            gradients['Wq'][l] += X2d.T @ dQ.reshape(-1, self.embed_dim)
+            gradients['Wk'][l] += X2d.T @ dK.reshape(-1, self.embed_dim)
+            gradients['Wv'][l] += X2d.T @ dV.reshape(-1, self.embed_dim)
+
+            d_attn_input = (dQ @ self.Wq[l].T) + (dK @ self.Wk[l].T) + (dV @ self.Wv[l].T)
+            dH = d_attn_input + d_attn_res_in
+
+        # Embedding gradient (scatter add)
+        x = cache['x']  # (B, S)
+        flat_x = x.flatten()
+        dH_flat = dH.reshape(-1, self.embed_dim)
+        self.np.add.at(gradients['We'], flat_x, dH_flat)
+
+        return gradients
 
     def backward(self, cache, dlogits):
         """

@@ -63,11 +63,12 @@ def train_transformer(model, x_train, y_train, learning_rate=0.01, nepoch=100, e
             s_max = int(npb.max(lens))
             xb = xb[:, :s_max]
 
-            logits, _ = model.forward(xb)            # (B, s_max, V)
+            H, _ = model.forward(xb, return_hidden_only=True)  # (B, s_max, E)
             idx = npb.arange(len(yb))
             t = lens - 1
-            logits_last = logits[idx, t][:, None, :]  # (B, 1, V)
-            loss, _ = model.calculate_loss_dlogits(logits_last, yb[:, None])
+            H_last = H[idx, t, :]  # (B,E)
+            logits_last = H_last @ model.W_vocab + model.b_vocab  # (B,V)
+            loss, _ = model.calculate_loss_dlogits(logits_last, yb)
             total_loss += float(loss) * len(yb)
             total_count += len(yb)
         model.train()
@@ -85,6 +86,13 @@ def train_transformer(model, x_train, y_train, learning_rate=0.01, nepoch=100, e
             if len(losses) > 1 and eval_loss > losses[-2][1]:
                 learning_rate *= 0.5
                 print("Learning rate decreased to:", learning_rate)
+            # Optionally release CuPy memory pool after large eval batch
+            try:
+                import cupy
+                cupy.get_default_memory_pool().free_all_blocks()
+                cupy.get_default_pinned_memory_pool().free_all_blocks()
+            except Exception:
+                pass
 
         # Shuffle each epoch
         perm = npb.random.permutation(N)
@@ -101,16 +109,15 @@ def train_transformer(model, x_train, y_train, learning_rate=0.01, nepoch=100, e
                 s_max = int(npb.max(lens))
                 xb = xb[:, :s_max]
 
-                logits, cache = model.forward(xb)  # (B, s_max, V)
+                H, cache = model.forward(xb, return_hidden_only=True)  # (B, s_max, E)
                 idx = npb.arange(len(yb))
                 t = lens - 1
-                logits_last = logits[idx, t][:, None, :]  # (B,1,V)
+                H_last = H[idx, t, :]  # (B,E)
+                logits_last = H_last @ model.W_vocab + model.b_vocab  # (B,V)
 
-                loss, dlogits_last = model.calculate_loss_dlogits(logits_last, yb[:, None])
-                dlogits = npb.zeros_like(logits)
-                dlogits[idx, t, :] = dlogits_last[:, 0, :]
-
-                grads = model.backward(cache, dlogits)
+                loss, dlog_last = model.calculate_loss_dlogits(logits_last, yb)
+                # dlog_last: (B,1,V) because calculate_loss_dlogits normalizes shapes
+                grads = model.backward_last_token(cache, t, dlog_last[:, 0, :])
 
                 if clip_grad_norm is not None:
                     # Flatten all gradient arrays into a list for clipping
@@ -138,8 +145,8 @@ def train_transformer(model, x_train, y_train, learning_rate=0.01, nepoch=100, e
                 print("\nSamples:")
                 for prompt in sample_prompts:
                     seq = npb.array(prompt, dtype=npb.int32)[None, :]
-                    logits, _ = model.forward(seq)
-                    next_logits = logits[0, -1]
+                    H, _ = model.forward(seq, return_hidden_only=True)
+                    next_logits = H[0, -1] @ model.W_vocab + model.b_vocab
                     probs = npb.exp(next_logits - next_logits.max())
                     probs /= probs.sum()
                     # Bring to CPU for argsort display if needed
@@ -154,6 +161,14 @@ def train_transformer(model, x_train, y_train, learning_rate=0.01, nepoch=100, e
                     print('  ->', ' '.join(words))
             except Exception as e:
                 print('Sampling error:', e)
+
+        # Release unused GPU memory chunks between epochs
+        try:
+            import cupy
+            cupy.get_default_memory_pool().free_all_blocks()
+            cupy.get_default_pinned_memory_pool().free_all_blocks()
+        except Exception:
+            pass
 
     total_time = time.time() - start_time
     print(f"Training completed in {total_time:.2f} sec")

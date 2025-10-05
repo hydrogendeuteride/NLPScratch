@@ -93,7 +93,7 @@ train_transformer(
     learning_rate=0.0001,
     nepoch=10,
     evaluation_loss_after=1,
-    batch_size=64,
+    batch_size=16,
     print_every=10,
     clip_grad_norm=1.0,
     idx_to_word=idx_to_word,
