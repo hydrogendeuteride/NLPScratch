@@ -1,5 +1,5 @@
 from transformer import Transformer, pad_sequence
-from utils.train import *
+from utils.train import train_transformer
 from utils.utils import read_file_to_list, reader, count_word_POS, build_vocab
 import numpy as np
 from SkipGram.torch_skipgram import SkipGram
@@ -51,4 +51,27 @@ X_train, Y_train = generate_sequence_data(processed_data_line, word_to_idx, max_
 model = Transformer(vocab_size=len(word_to_idx), embed_dim=256, num_heads=8, ff_dim=2048, num_layers=3,
                     max_len=max_len, embedding_weight=embeddings, use_gpu=True)
 
-train_transformer(model, X_train, Y_train, learning_rate=0.0001, nepoch=10, evaluation_loss_after=1)
+# Build reverse map for qualitative samples
+idx_to_word = {idx: w for w, idx in word_to_idx.items()}
+
+# Build a few sample prompts (as lists of indices) from the training data
+sample_prompts = []
+for sent in processed_data_line[:3]:
+    ids = [word_to_idx.get(w, word_to_idx['<UNKNOWN>']) for w, t in sent]
+    # take a short prefix to keep compute light
+    sample_prompts.append(ids[: min(12, len(ids)-1)])
+
+train_transformer(
+    model,
+    X_train,
+    Y_train,
+    learning_rate=0.0001,
+    nepoch=10,
+    evaluation_loss_after=1,
+    batch_size=64,
+    print_every=10,
+    clip_grad_norm=1.0,
+    idx_to_word=idx_to_word,
+    sample_prompts=sample_prompts,
+    topk=5,
+)

@@ -65,7 +65,7 @@ def softmax_backward(dout, softmax_output, axis=-1):
     return dx
 
 
-def layer_norm_backward(dout, x, eps=1e-5):
+def layer_norm_backward(dout, x, eps=1e-6):
     # x, dout shape = (..., D)
     np = cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy
 
@@ -85,3 +85,40 @@ def layer_norm_backward(dout, x, eps=1e-5):
             - (x - mean) * dxmu_sum / ((var + eps) * D)
     )
     return dx
+
+
+def layer_norm_affine_forward(x, gamma, beta, eps=1e-6):
+    """
+    LayerNorm with learnable scale/bias.
+    x: (B, S, E), gamma/beta: (E,)
+    returns: y, cache
+    """
+    np = cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy
+    mean = np.mean(x, axis=-1, keepdims=True)
+    var = np.var(x, axis=-1, keepdims=True)
+    std = np.sqrt(var + eps)
+    x_hat = (x - mean) / std
+    y = x_hat * gamma + beta
+    cache = (x_hat, std, gamma)
+    return y, cache
+
+
+def layer_norm_affine_backward(dout, cache):
+    """
+    Backward for affine LayerNorm.
+    dout: (B, S, E)
+    cache: (x_hat, std, gamma)
+    returns: dx, dgamma, dbeta
+    """
+    x_hat, std, gamma = cache
+    np = cupy.get_array_module(dout) if 'cupy' in str(type(dout)) else numpy
+    E = dout.shape[-1]
+
+    dgamma = np.sum(dout * x_hat, axis=(0, 1))
+    dbeta = np.sum(dout, axis=(0, 1))
+
+    dx_hat = dout * gamma
+    sum_dx_hat = np.sum(dx_hat, axis=-1, keepdims=True)
+    sum_dx_hat_xhat = np.sum(dx_hat * x_hat, axis=-1, keepdims=True)
+    dx = (1.0 / E) * (dx_hat - sum_dx_hat - x_hat * sum_dx_hat_xhat) / std
+    return dx, dgamma, dbeta

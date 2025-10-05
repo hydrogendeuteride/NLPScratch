@@ -7,7 +7,7 @@ import pickle
 
 class Transformer:
     def __init__(self, vocab_size, embed_dim, num_heads, ff_dim, num_layers, max_len,
-                 embedding_weight=None, use_gpu=False):
+                 embedding_weight=None, use_gpu=False, dropout_p=0.1, use_adam=True):
         self.use_gpu = use_gpu and (default_library == 'cupy')
         self.np = cupy if self.use_gpu else numpy
 
@@ -17,7 +17,19 @@ class Transformer:
         self.ff_dim = ff_dim
         self.num_layers = num_layers
         self.max_len = max_len
+        assert embed_dim % num_heads == 0, "embed_dim must be divisible by num_heads"
         self.head_dim = embed_dim // num_heads
+
+        # training/eval mode
+        self.training = True
+        self.dropout_p = float(dropout_p)
+
+        # Optimizer (Adam)
+        self.use_adam = use_adam
+        self.adam_b1 = 0.9
+        self.adam_b2 = 0.999
+        self.adam_eps = 1e-8
+        self.adam_t = 0
 
         if embedding_weight is None:
             self.We = lecun_init((self.vocab_size, self.embed_dim), self.embed_dim, self.np)
@@ -43,6 +55,44 @@ class Transformer:
         self.b_vocab = self.np.zeros((vocab_size,), dtype=self.np.float32)
 
         self.pe = positional_encoding(self.max_len, self.embed_dim, self.np)
+
+        # LayerNorm parameters (learnable)
+        self.ln1_gamma = self.np.ones((self.num_layers, self.embed_dim), dtype=self.np.float32)
+        self.ln1_beta = self.np.zeros((self.num_layers, self.embed_dim), dtype=self.np.float32)
+        self.ln2_gamma = self.np.ones((self.num_layers, self.embed_dim), dtype=self.np.float32)
+        self.ln2_beta = self.np.zeros((self.num_layers, self.embed_dim), dtype=self.np.float32)
+
+        # Adam state containers
+        if self.use_adam:
+            self._init_adam_states()
+
+    def _init_adam_states(self):
+        npb = self.np
+        def zlike(x):
+            return npb.zeros_like(x)
+        self.m = {
+            'We': zlike(self.We), 'Wq': zlike(self.Wq), 'Wk': zlike(self.Wk), 'Wv': zlike(self.Wv),
+            'Wo': zlike(self.Wo), 'W1': zlike(self.W1), 'W2': zlike(self.W2),
+            'b1': zlike(self.b1), 'b2': zlike(self.b2),
+            'W_vocab': zlike(self.W_vocab), 'b_vocab': zlike(self.b_vocab),
+            'ln1_gamma': zlike(self.ln1_gamma), 'ln1_beta': zlike(self.ln1_beta),
+            'ln2_gamma': zlike(self.ln2_gamma), 'ln2_beta': zlike(self.ln2_beta),
+        }
+        self.v = {k: self.np.zeros_like(v) for k, v in self.m.items()}
+
+    def train(self):
+        self.training = True
+
+    def eval(self):
+        self.training = False
+
+    def _dropout(self, x):
+        p = self.dropout_p if self.training else 0.0
+        if p <= 0.0:
+            return x, None
+        keep = 1.0 - p
+        mask = (self.np.random.random(x.shape) < keep).astype(self.np.float32)
+        return x * mask / keep, mask
 
     def forward(self, x):
         # x : (B, S)
@@ -78,13 +128,24 @@ class Transformer:
             attn_out = attn_out_4d.transpose(0, 2, 1, 3).reshape(B, S, self.embed_dim)
             attn_out = attn_out @ self.Wo[l]
 
-            attn_output = layer_norm(attn_input + attn_out)
+            # dropout on attention output
+            attn_out, drop_attn_mask = self._dropout(attn_out)
+
+            # LayerNorm with affine on residual
+            attn_residual = attn_input + attn_out
+            attn_output, ln1_cache = layer_norm_affine_forward(
+                attn_residual, self.ln1_gamma[l], self.ln1_beta[l], eps=1e-6)
 
             ffn_input = attn_output
             ffn_hidden = relu(ffn_input @ self.W1[l] + self.b1[l])
             ffn_out = ffn_hidden @ self.W2[l] + self.b2[l]
 
-            H_new = layer_norm(ffn_input + ffn_out)
+            # dropout on FFN output
+            ffn_out, drop_ffn_mask = self._dropout(ffn_out)
+
+            ffn_residual = ffn_input + ffn_out
+            H_new, ln2_cache = layer_norm_affine_forward(
+                ffn_residual, self.ln2_gamma[l], self.ln2_beta[l], eps=1e-6)
 
             layer_c['attn_input'] = attn_input
             layer_c['Q'] = Q_4d
@@ -99,6 +160,12 @@ class Transformer:
             layer_c['ffn_input'] = ffn_input
             layer_c['ffn_hidden'] = ffn_hidden
             layer_c['ffn_out'] = ffn_out
+
+            # caches for norm and dropout
+            layer_c['ln1'] = ln1_cache
+            layer_c['ln2'] = ln2_cache
+            layer_c['drop_attn'] = drop_attn_mask
+            layer_c['drop_ffn'] = drop_ffn_mask
 
             layers_cache.append(layer_c)
             H = H_new
@@ -153,12 +220,24 @@ class Transformer:
             ffn_out = layer_c['ffn_out']  # (B, S ,E)
             ffn_hidden = layer_c['ffn_hidden']  # (B, S, ff_dim)
 
-            residual_in = ffn_input + ffn_out  # (B ,S ,E)
-            d_residual_in = layer_norm_backward(dH, residual_in)
+            # LN2 backward
+            d_residual_in, d_ln2_gamma, d_ln2_beta = layer_norm_affine_backward(dH, layer_c['ln2'])
+            # grads for ln2 params
+            gradients.setdefault('ln2_gamma', self.np.zeros_like(self.ln2_gamma))
+            gradients.setdefault('ln2_beta', self.np.zeros_like(self.ln2_beta))
+            gradients['ln2_gamma'][l] += d_ln2_gamma
+            gradients['ln2_beta'][l] += d_ln2_beta
 
-            d_ffn_out = d_residual_in  # (B, S, E)
+            d_ffn_out = d_residual_in  # (B, S, E) path through residual to FFN output
 
-            gradients['W2'][l] += self.np.einsum('bsf,bse->fe', ffn_hidden, d_ffn_out)
+            # dropout backward on FFN output
+            if layer_c['drop_ffn'] is not None:
+                keep = 1.0 - self.dropout_p
+                d_ffn_out = d_ffn_out * layer_c['drop_ffn'] / keep
+
+            # dW2: (ff_dim, E)
+            gradients['W2'][l] += (ffn_hidden.reshape(-1, self.ff_dim).T @
+                                   d_ffn_out.reshape(-1, self.embed_dim))
             gradients['b2'][l] += self.np.sum(d_ffn_out, axis=(0, 1))
 
             d_ffn_hidden = d_ffn_out @ self.W2[l].T  # (B, S, ff_dim)
@@ -166,7 +245,9 @@ class Transformer:
             z = ffn_input @ self.W1[l] + self.b1[l]  # (B, S, ff_dim)
             dz = relu_backward(d_ffn_hidden, z)
 
-            gradients['W1'][l] += self.np.einsum('bse,bsf->ef', ffn_input, dz)
+            # dW1: (E, ff_dim)
+            gradients['W1'][l] += (ffn_input.reshape(-1, self.embed_dim).T @
+                                   dz.reshape(-1, self.ff_dim))
             gradients['b1'][l] += self.np.sum(dz, axis=(0, 1))
 
             d_ffn_input = dz @ self.W1[l].T  # (B, S ,E)
@@ -184,9 +265,18 @@ class Transformer:
             V_4d = layer_c['V']  # (B,h,S,d)
 
             attn_residual_in = attn_input + attn_out
-            d_attn_res_in = layer_norm_backward(dH, attn_residual_in)
+            d_attn_res_in, d_ln1_gamma, d_ln1_beta = layer_norm_affine_backward(dH, layer_c['ln1'])
+            gradients.setdefault('ln1_gamma', self.np.zeros_like(self.ln1_gamma))
+            gradients.setdefault('ln1_beta', self.np.zeros_like(self.ln1_beta))
+            gradients['ln1_gamma'][l] += d_ln1_gamma
+            gradients['ln1_beta'][l] += d_ln1_beta
 
             d_attn_out = d_attn_res_in
+
+            # dropout backward on attention output
+            if layer_c['drop_attn'] is not None:
+                keep = 1.0 - self.dropout_p
+                d_attn_out = d_attn_out * layer_c['drop_attn'] / keep
 
             dWo_in = d_attn_out  # (B,S,E)
             attn_out_noWo_2d = attn_out_4d.transpose(0, 2, 1, 3).reshape(B * S, self.embed_dim)
@@ -210,9 +300,11 @@ class Transformer:
             dK = dK_4d.transpose(0, 2, 1, 3).reshape(B, S, self.embed_dim)
             dV = dV_4d.transpose(0, 2, 1, 3).reshape(B, S, self.embed_dim)
 
-            gradients['Wq'][l] += self.np.einsum('bse,bsE->eE', attn_input, dQ)
-            gradients['Wk'][l] += self.np.einsum('bse,bsE->eE', attn_input, dK)
-            gradients['Wv'][l] += self.np.einsum('bse,bsE->eE', attn_input, dV)
+            # dWq/dWk/dWv: (E, E)
+            X2d = attn_input.reshape(-1, self.embed_dim)
+            gradients['Wq'][l] += X2d.T @ dQ.reshape(-1, self.embed_dim)
+            gradients['Wk'][l] += X2d.T @ dK.reshape(-1, self.embed_dim)
+            gradients['Wv'][l] += X2d.T @ dV.reshape(-1, self.embed_dim)
 
             d_attn_input = (dQ @ self.Wq[l].T) + (dK @ self.Wk[l].T) + (dV @ self.Wv[l].T)
 
@@ -226,27 +318,74 @@ class Transformer:
 
         return gradients
 
+    def _adam_update(self, param_name, param, grad, lr):
+        m = self.m[param_name]
+        v = self.v[param_name]
+        b1, b2, eps = self.adam_b1, self.adam_b2, self.adam_eps
+        m[:] = b1 * m + (1 - b1) * grad
+        v[:] = b2 * v + (1 - b2) * (grad * grad)
+        m_hat = m / (1 - b1 ** self.adam_t)
+        v_hat = v / (1 - b2 ** self.adam_t)
+        param -= lr * m_hat / (self.np.sqrt(v_hat) + eps)
+
+    def step(self, gradients, learning_rate=0.001):
+        if self.use_adam and (not hasattr(self, 'm') or not hasattr(self, 'v')):
+            self._init_adam_states()
+
+        if self.use_adam:
+            self.adam_t += 1
+            self._adam_update('We', self.We, gradients['We'], learning_rate)
+            self._adam_update('Wq', self.Wq, gradients['Wq'], learning_rate)
+            self._adam_update('Wk', self.Wk, gradients['Wk'], learning_rate)
+            self._adam_update('Wv', self.Wv, gradients['Wv'], learning_rate)
+            self._adam_update('Wo', self.Wo, gradients['Wo'], learning_rate)
+            self._adam_update('W1', self.W1, gradients['W1'], learning_rate)
+            self._adam_update('b1', self.b1, gradients['b1'], learning_rate)
+            self._adam_update('W2', self.W2, gradients['W2'], learning_rate)
+            self._adam_update('b2', self.b2, gradients['b2'], learning_rate)
+            self._adam_update('W_vocab', self.W_vocab, gradients['W_vocab'], learning_rate)
+            self._adam_update('b_vocab', self.b_vocab, gradients['b_vocab'], learning_rate)
+            self._adam_update('ln1_gamma', self.ln1_gamma, gradients['ln1_gamma'], learning_rate)
+            self._adam_update('ln1_beta', self.ln1_beta, gradients['ln1_beta'], learning_rate)
+            self._adam_update('ln2_gamma', self.ln2_gamma, gradients['ln2_gamma'], learning_rate)
+            self._adam_update('ln2_beta', self.ln2_beta, gradients['ln2_beta'], learning_rate)
+        else:
+            # SGD fallback
+            self.We -= learning_rate * gradients['We']
+            self.Wq -= learning_rate * gradients['Wq']
+            self.Wk -= learning_rate * gradients['Wk']
+            self.Wv -= learning_rate * gradients['Wv']
+            self.Wo -= learning_rate * gradients['Wo']
+            self.W1 -= learning_rate * gradients['W1']
+            self.b1 -= learning_rate * gradients['b1']
+            self.W2 -= learning_rate * gradients['W2']
+            self.b2 -= learning_rate * gradients['b2']
+            self.W_vocab -= learning_rate * gradients['W_vocab']
+            self.b_vocab -= learning_rate * gradients['b_vocab']
+            # LN params
+            self.ln1_gamma -= learning_rate * gradients['ln1_gamma']
+            self.ln1_beta -= learning_rate * gradients['ln1_beta']
+            self.ln2_gamma -= learning_rate * gradients['ln2_gamma']
+            self.ln2_beta -= learning_rate * gradients['ln2_beta']
+
+    # Backward-compat name
     def sgd_step(self, gradients, learning_rate=0.01):
-        self.We -= learning_rate * gradients['We']
-        self.Wq -= learning_rate * gradients['Wq']
-        self.Wk -= learning_rate * gradients['Wk']
-        self.Wv -= learning_rate * gradients['Wv']
-        self.Wo -= learning_rate * gradients['Wo']
-        self.W1 -= learning_rate * gradients['W1']
-        self.b1 -= learning_rate * gradients['b1']
-        self.W2 -= learning_rate * gradients['W2']
-        self.b2 -= learning_rate * gradients['b2']
-        self.W_vocab -= learning_rate * gradients['W_vocab']
-        self.b_vocab -= learning_rate * gradients['b_vocab']
+        self.step(gradients, learning_rate)
 
     def calculate_loss_dlogits(self, logits, y):
         """
-        logits : (B, S, vocab_size)
-        y : (B, S)
+        logits : (B, S, vocab_size) or (B, V) if S==1 and squeezed
+        y : (B, S) or (B,) aligned with logits
         return:
             loss : scalar
             dlogits : (B, S, vocab_size)
         """
+
+        # Normalize shapes to (B, S, V)
+        if logits.ndim == 2:
+            logits = logits[:, None, :]
+        if y.ndim == 1:
+            y = y[:, None]
 
         B, S, V = logits.shape
 
@@ -259,15 +398,13 @@ class Transformer:
         N = B * S
         y_flat = y.reshape(N)
         log_probs_2d = log_probs.reshape(N, V)
-        correct_lp = log_probs_2d[np.arange(N), y_flat]
+        correct_lp = log_probs_2d[self.np.arange(N), y_flat]
         loss = -self.np.mean(correct_lp)
 
         softmax_out = exp_x / sum_exp
-        dlogits = softmax_out
-
-        for i in range(N):
-            dlogits.reshape(N, V)[i, y_flat[i]] -= 1.0
-        dlogits /= N
+        dlogits = softmax_out.reshape(N, V)
+        dlogits[self.np.arange(N), y_flat] -= 1.0
+        dlogits = (dlogits / N).reshape(B, S, V)
 
         return loss, dlogits
 
@@ -282,6 +419,12 @@ class Transformer:
             'W2': self.W2,
             'b1': self.b1,
             'b2': self.b2,
+            'W_vocab': self.W_vocab,
+            'b_vocab': self.b_vocab,
+            'ln1_gamma': self.ln1_gamma,
+            'ln1_beta': self.ln1_beta,
+            'ln2_gamma': self.ln2_gamma,
+            'ln2_beta': self.ln2_beta,
         }
         if self.use_gpu:
             weights = {k: v.get() for k, v in weights.items()}
