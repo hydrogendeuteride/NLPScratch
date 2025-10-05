@@ -50,6 +50,19 @@ The models implemented are:
   - `train.py`
   - `utils.py`
 
+## How To Run (no import errors)
+- Always run from the repo root and use module mode so imports resolve:
+  - SkipGram training (PyTorch):
+    - `python -m SkipGram.torch_skipgram`
+  - Transformer training (NumPy/CuPy):
+    - `python -m Transformer.transformer_train`
+
+- Alternatively, run the scripts directly from anywhere by setting `PYTHONPATH` to the repo root:
+  - `PYTHONPATH=. python SkipGram/torch_skipgram.py`
+  - `PYTHONPATH=. python Transformer/transformer_train.py`
+
+The training scripts were updated to resolve dataset/weight paths relative to the repository root and to add the root to `sys.path` automatically. This avoids `ModuleNotFoundError: No module named 'utils'` when not launched from a specific directory.
+
 ## Models Implemented
 ### HMM
 Hidden Markov Model POS tagging:

@@ -1,10 +1,22 @@
-from transformer import Transformer, pad_sequence
+import os
+import sys
+import numpy as np
+import torch
+
+# Make repo root importable regardless of how this file is executed
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+# Support both package and script execution
+try:
+    from .transformer import Transformer, pad_sequence
+except ImportError:
+    from transformer import Transformer, pad_sequence
+
 from utils.train import train_transformer
 from utils.utils import read_file_to_list, reader, count_word_POS, build_vocab
-import numpy as np
 from SkipGram.torch_skipgram import SkipGram
-import torch
-import os
 
 try:
     import cupy
@@ -30,14 +42,17 @@ def generate_sequence_data(processed_data, word_to_index, max_len):
     return X, Y
 
 
-data_line = read_file_to_list('../dataset/tagged_train.txt')
+DATASET_PATH = os.path.join(REPO_ROOT, 'dataset', 'tagged_train.txt')
+WEIGHT_PATH = os.path.join(REPO_ROOT, 'weight', 'word2vec_all.pth')
+
+data_line = read_file_to_list(DATASET_PATH)
 processed_data_line = reader(data_line)
 pos_cnt, word_cnt = count_word_POS(processed_data_line)
 word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
 
 #####################################################################
 word2vec_model = SkipGram(len(word_to_idx), 256)
-model_path = '../weight/word2vec_all.pth'
+model_path = WEIGHT_PATH
 if os.path.exists(model_path):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     state = torch.load(model_path, map_location=device)
@@ -86,4 +101,4 @@ train_transformer(
     topk=5,
 )
 
-model.save('transformer_model.pth')
+model.save(os.path.join(REPO_ROOT, 'transformer_model.pth'))

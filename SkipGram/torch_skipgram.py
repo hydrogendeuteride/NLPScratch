@@ -1,13 +1,20 @@
 import os
+import sys
 from collections import Counter
 import random
-from utils.utils import *
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 import torch.nn.functional as F
+
+# Ensure repo root is on sys.path so `utils` works regardless of CWD
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+from utils.utils import *
 
 # Optional: allow TF32 for faster matmuls on Ampere+
 if torch.cuda.is_available():
@@ -140,7 +147,11 @@ def build_unigram_table(word_counts, vocab_size, power=0.75, device='cpu', pad_i
 
 
 if __name__ == "__main__":
-    data_line = read_file_to_list('../dataset/tagged_train.txt')
+    # Resolve paths relative to the repo root
+    DATASET_PATH = os.path.join(REPO_ROOT, 'dataset', 'tagged_train.txt')
+    WEIGHT_PATH = os.path.join(REPO_ROOT, 'weight', 'word2vec_all.pth')
+
+    data_line = read_file_to_list(DATASET_PATH)
     processed_data_line = reader(data_line)
     pos_cnt, word_cnt = count_word_POS(processed_data_line)
     word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
@@ -201,8 +212,9 @@ if __name__ == "__main__":
         print(f"Epoch {epoch:02d} | loss {total_loss / max(1,total_steps):.4f}")
 
     # Save embeddings
-    torch.save(model.state_dict(), '../weight/word2vec_all.pth')
-    print("Model saved -> ../weight/word2vec_all.pth")
+    os.makedirs(os.path.dirname(WEIGHT_PATH), exist_ok=True)
+    torch.save(model.state_dict(), WEIGHT_PATH)
+    print(f"Model saved -> {WEIGHT_PATH}")
 
     print("\nTesting with nearest words:")
     E = model.get_embeddings()
