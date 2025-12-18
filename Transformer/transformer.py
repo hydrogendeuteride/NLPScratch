@@ -115,7 +115,7 @@ class Transformer:
 
         padding_mask = create_padding_mask(x, lib=self.np)  # (B, 1, 1, S)
         look_ahead = create_look_ahead_mask(S, lib=self.np)  # (1, 1, S, S)
-        combined_mask = self.np.maximum(look_ahead, padding_mask)  # (B, 1, S, S)
+        combined_mask = self.np.minimum(look_ahead, padding_mask)  # (B, 1, S, S)
 
         layers_cache = []
 
@@ -135,7 +135,7 @@ class Transformer:
             attn_scores = Q_4d @ K_4d.transpose(0, 1, 3, 2) / self.np.sqrt(self.head_dim)  # (B, h, S, S)
             attn_scores += combined_mask
 
-            attn_weights = softmax(attn_scores, axis=-1)  # (B, h, S, S)
+            attn_weights = softmax(attn_scores, axis=-1, lib=self.np)  # (B, h, S, S)
 
             attn_out_4d = attn_weights @ V_4d
             attn_out = attn_out_4d.transpose(0, 2, 1, 3).reshape(B, S, self.embed_dim)
@@ -150,7 +150,7 @@ class Transformer:
                 attn_residual, self.ln1_gamma[l], self.ln1_beta[l], eps=1e-6)
 
             ffn_input = attn_output
-            ffn_hidden = relu(ffn_input @ self.W1[l] + self.b1[l])
+            ffn_hidden = relu(ffn_input @ self.W1[l] + self.b1[l], lib=self.np)
             ffn_out = ffn_hidden @ self.W2[l] + self.b2[l]
 
             # dropout on FFN output
@@ -164,15 +164,12 @@ class Transformer:
             layer_c['Q'] = Q_4d
             layer_c['K'] = K_4d
             layer_c['V'] = V_4d
-            layer_c['scores'] = attn_scores
             layer_c['attn_weights'] = attn_weights
-            layer_c['attn_out_beforeWo'] = attn_out_4d
-            layer_c['attn_out'] = attn_out
-            layer_c['attn_output'] = attn_output
+            # attn_out / attn_output are not needed for backward (dropout/LN caches are enough)
 
             layer_c['ffn_input'] = ffn_input
             layer_c['ffn_hidden'] = ffn_hidden
-            layer_c['ffn_out'] = ffn_out
+            # ffn_out is not needed for backward (dropout/LN caches are enough)
 
             # caches for norm and dropout
             layer_c['ln1'] = ln1_cache
@@ -248,7 +245,6 @@ class Transformer:
             layer_c = layers[l]
 
             ffn_input = layer_c['ffn_input']  # (B, S, E)
-            ffn_out = layer_c['ffn_out']  # (B, S ,E)
             ffn_hidden = layer_c['ffn_hidden']  # (B, S, ff_dim)
 
             # LN2 backward
@@ -279,10 +275,7 @@ class Transformer:
 
             # Attention block
             attn_input = layer_c['attn_input']
-            attn_out = layer_c['attn_out']
-            attn_out_4d = layer_c['attn_out_beforeWo']
             attn_weights = layer_c['attn_weights']
-            scores = layer_c['scores']
             Q_4d = layer_c['Q']
             K_4d = layer_c['K']
             V_4d = layer_c['V']
@@ -296,6 +289,7 @@ class Transformer:
                 d_attn_out = d_attn_out * layer_c['drop_attn'] / keep
 
             dWo_in = d_attn_out
+            attn_out_4d = attn_weights @ V_4d
             attn_out_noWo_2d = attn_out_4d.transpose(0, 2, 1, 3).reshape(B * S, self.embed_dim)
             dWo_in_2d = dWo_in.reshape(B * S, self.embed_dim)
             gradients['Wo'][l] += attn_out_noWo_2d.T @ dWo_in_2d
@@ -304,7 +298,7 @@ class Transformer:
             d_attn_out_noWo_4d = d_attn_out_noWo_2d.reshape(B, S, self.num_heads, self.head_dim).transpose(0, 2, 1, 3)
             d_attn_weight = d_attn_out_noWo_4d @ V_4d.transpose(0, 1, 3, 2)
             dV_4d = attn_weights.transpose(0, 1, 3, 2) @ d_attn_out_noWo_4d
-            d_attn_score = softmax_backward(d_attn_weight, attn_weights)
+            d_attn_score = softmax_backward(d_attn_weight, attn_weights, lib=self.np)
 
             scale = 1.0 / self.np.sqrt(self.head_dim)
             dQ_4d = scale * (d_attn_score @ K_4d)
@@ -367,7 +361,6 @@ class Transformer:
             layer_c = layers[l]
 
             ffn_input = layer_c['ffn_input']  # (B, S, E)
-            ffn_out = layer_c['ffn_out']  # (B, S ,E)
             ffn_hidden = layer_c['ffn_hidden']  # (B, S, ff_dim)
 
             # LN2 backward
@@ -406,15 +399,11 @@ class Transformer:
             dH = d_ffn_input + dH_attn_out
 
             attn_input = layer_c['attn_input']  # (B,S,E)
-            attn_out = layer_c['attn_out']  # (B,S,E)
-            attn_out_4d = layer_c['attn_out_beforeWo']  # (B,h,S,d)
             attn_weights = layer_c['attn_weights']  # (B,h,S,S)
-            scores = layer_c['scores']  # (B,h,S,S)
             Q_4d = layer_c['Q']  # (B,h,S,d)
             K_4d = layer_c['K']  # (B,h,S,d)
             V_4d = layer_c['V']  # (B,h,S,d)
 
-            attn_residual_in = attn_input + attn_out
             d_attn_res_in, d_ln1_gamma, d_ln1_beta = layer_norm_affine_backward(dH, layer_c['ln1'])
             gradients.setdefault('ln1_gamma', self.np.zeros_like(self.ln1_gamma))
             gradients.setdefault('ln1_beta', self.np.zeros_like(self.ln1_beta))
@@ -429,6 +418,7 @@ class Transformer:
                 d_attn_out = d_attn_out * layer_c['drop_attn'] / keep
 
             dWo_in = d_attn_out  # (B,S,E)
+            attn_out_4d = attn_weights @ V_4d
             attn_out_noWo_2d = attn_out_4d.transpose(0, 2, 1, 3).reshape(B * S, self.embed_dim)
             dWo_in_2d = dWo_in.reshape(B * S, self.embed_dim)
 
@@ -440,7 +430,7 @@ class Transformer:
             d_attn_weight = d_attn_out_noWo_4d @ V_4d.transpose(0, 1, 3, 2)
             dV_4d = attn_weights.transpose(0, 1, 3, 2) @ d_attn_out_noWo_4d
 
-            d_attn_score = softmax_backward(d_attn_weight, attn_weights)  # (B, h, S, S)
+            d_attn_score = softmax_backward(d_attn_weight, attn_weights, lib=self.np)  # (B, h, S, S)
 
             scale = 1.0 / self.np.sqrt(self.head_dim)
             dQ_4d = scale * (d_attn_score @ K_4d)
@@ -583,8 +573,13 @@ class Transformer:
 
 
 def pad_sequence(sequence, max_len, pad_token=0, lib=np):
-    padded_sequence = sequence + [pad_token] * (max_len - len(sequence))
-    return padded_sequence
+    # Keep the most recent context if a prefix exceeds max_len.
+    if max_len is None:
+        return list(sequence)
+    seq = list(sequence)
+    if len(seq) >= max_len:
+        return seq[-max_len:]
+    return seq + [pad_token] * (max_len - len(seq))
 
 
 def create_padding_mask(x, pad_token=0, lib=np):

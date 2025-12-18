@@ -126,7 +126,7 @@ def train_transformer(model, x_train, y_train, learning_rate=0.01, nepoch=100, e
                         grad_list.append(g)
                     # clip_grads operates in-place
                     from utils.function import clip_grads
-                    clip_grads(grad_list, clip_grad_norm)
+                    clip_grads(grad_list, clip_grad_norm, lib=npb)
 
                 model.step(grads, learning_rate)
 

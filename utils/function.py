@@ -8,8 +8,8 @@ except ImportError:
     default_library = 'numpy'
 
 
-def softmax(x, axis=-1):
-    np = cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy
+def softmax(x, axis=-1, lib=None):
+    np = lib if lib is not None else (cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy)
 
     max_val = np.max(x, axis=axis, keepdims=True)
     x_exp = np.exp(x - max_val)
@@ -17,18 +17,18 @@ def softmax(x, axis=-1):
     return x_exp / sum_exp
 
 
-def sigmoid(x):
-    np = cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy
+def sigmoid(x, lib=None):
+    np = lib if lib is not None else (cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy)
 
     x_clipped = np.clip(x, -500, 500)
     return 1.0 / (1.0 + np.exp(-x_clipped))
 
 
-def clip_grads(gradients, max_norm):
+def clip_grads(gradients, max_norm, lib=None):
     if not gradients:
         return
 
-    np = cupy.get_array_module(gradients[0]) if 'cupy' in str(type(gradients[0])) else numpy
+    np = lib if lib is not None else (cupy.get_array_module(gradients[0]) if 'cupy' in str(type(gradients[0])) else numpy)
 
     total_norm = np.sqrt(sum(np.sum(np.square(g)) for g in gradients))
 
@@ -38,8 +38,8 @@ def clip_grads(gradients, max_norm):
             g *= scale
 
 
-def relu(x):
-    np = cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy
+def relu(x, lib=None):
+    np = lib if lib is not None else (cupy.get_array_module(x) if 'cupy' in str(type(x)) else numpy)
     return np.maximum(0, x)
 
 
@@ -56,8 +56,8 @@ def relu_backward(dout, x):
     return dx
 
 
-def softmax_backward(dout, softmax_output, axis=-1):
-    np = cupy.get_array_module(dout) if 'cupy' in str(type(dout)) else numpy
+def softmax_backward(dout, softmax_output, axis=-1, lib=None):
+    np = lib if lib is not None else (cupy.get_array_module(dout) if 'cupy' in str(type(dout)) else numpy)
 
     sum_dout = np.sum(dout * softmax_output, axis=axis, keepdims=True)
 
@@ -120,5 +120,5 @@ def layer_norm_affine_backward(dout, cache):
     dx_hat = dout * gamma
     sum_dx_hat = np.sum(dx_hat, axis=-1, keepdims=True)
     sum_dx_hat_xhat = np.sum(dx_hat * x_hat, axis=-1, keepdims=True)
-    dx = (1.0 / E) * (dx_hat - sum_dx_hat - x_hat * sum_dx_hat_xhat) / std
+    dx = (dx_hat - (sum_dx_hat / E) - x_hat * (sum_dx_hat_xhat / E)) / std
     return dx, dgamma, dbeta
