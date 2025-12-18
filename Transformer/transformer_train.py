@@ -1,5 +1,6 @@
 import os
 import sys
+
 import numpy as np
 import torch
 
@@ -18,12 +19,29 @@ from utils.train import train_transformer
 from utils.utils import read_file_to_list, reader, count_word_POS, build_vocab
 from SkipGram.torch_skipgram import SkipGram
 
-try:
-    import cupy
+#####################################################################
+# Word-level Transformer training (default)
+#
+# Hyperparameters are intentionally defined here (instead of argparse)
+# so they are easy to see/modify.
+#####################################################################
+DATASET_PATH = os.path.join(REPO_ROOT, "dataset", "tagged_train.txt")
+WORD2VEC_PATH = os.path.join(REPO_ROOT, "weight", "word2vec_all.pth")
+SAVE_PATH = os.path.join(REPO_ROOT, "transformer_model.pth")
 
-    array_library = cupy
-except ImportError:
-    array_library = np
+MAX_LEN = 320
+EMBED_DIM = 256
+NUM_HEADS = 8
+FF_DIM = 1024
+NUM_LAYERS = 3
+
+LEARNING_RATE = 0.0001
+NEPOCH = 10
+BATCH_SIZE = 16
+EVALUATION_LOSS_AFTER = 1
+PRINT_EVERY = 10
+CLIP_GRAD_NORM = 1.0
+TOPK = 5
 
 
 def generate_sequence_data(processed_data, word_to_index, max_len):
@@ -31,7 +49,7 @@ def generate_sequence_data(processed_data, word_to_index, max_len):
     Y = []
 
     for sentence in processed_data:
-        indices = [word_to_index.get(word, word_to_index['<UNKNOWN>']) for word, tag in sentence]
+        indices = [word_to_index.get(word, word_to_index["<UNKNOWN>"]) for word, _tag in sentence]
         for i in range(1, len(indices)):
             padded_seq = pad_sequence(indices[:i], max_len)
             X.append(padded_seq)
@@ -42,63 +60,71 @@ def generate_sequence_data(processed_data, word_to_index, max_len):
     return X, Y
 
 
-DATASET_PATH = os.path.join(REPO_ROOT, 'dataset', 'tagged_train.txt')
-WEIGHT_PATH = os.path.join(REPO_ROOT, 'weight', 'word2vec_all.pth')
+def main():
+    data_line = read_file_to_list(DATASET_PATH)
+    processed_data_line = reader(data_line)
+    pos_cnt, word_cnt = count_word_POS(processed_data_line)
+    word_to_idx, _tag_to_idx = build_vocab(word_cnt, pos_cnt)
 
-data_line = read_file_to_list(DATASET_PATH)
-processed_data_line = reader(data_line)
-pos_cnt, word_cnt = count_word_POS(processed_data_line)
-word_to_idx, tag_to_idx = build_vocab(word_cnt, pos_cnt)
+    # Always provide an embedding table (SkipGram init), and optionally load a checkpoint.
+    word2vec_model = SkipGram(len(word_to_idx), EMBED_DIM)
+    if os.path.exists(WORD2VEC_PATH):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        state = torch.load(WORD2VEC_PATH, map_location=device)
+        # Map legacy keys if needed
+        if isinstance(state, dict) and "embeddings.weight" in state and "input.weight" not in state:
+            state["input.weight"] = state["embeddings.weight"]
+        try:
+            res = word2vec_model.load_state_dict(state, strict=False)
+            print(
+                "Loaded word2vec checkpoint.",
+                "missing:", getattr(res, "missing_keys", None),
+                "unexpected:", getattr(res, "unexpected_keys", None),
+            )
+        except Exception:
+            print("Failed to load word2vec checkpoint; using randomly initialized SkipGram embeddings.")
+    else:
+        print(f"word2vec checkpoint not found: {WORD2VEC_PATH} (using random SkipGram embeddings)")
 
-#####################################################################
-word2vec_model = SkipGram(len(word_to_idx), 256)
-model_path = WEIGHT_PATH
-if os.path.exists(model_path):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    state = torch.load(model_path, map_location=device)
-    # Map legacy keys if needed
-    if 'embeddings.weight' in state and 'input.weight' not in state:
-        state['input.weight'] = state['embeddings.weight']
-    try:
-        res = word2vec_model.load_state_dict(state, strict=False)
-        print("Loaded word2vec checkpoint.",
-              "missing:", getattr(res, 'missing_keys', None),
-              "unexpected:", getattr(res, 'unexpected_keys', None))
-    except Exception:
-        print("Loaded word2vec checkpoint with relaxed mapping.")
+    embeddings = word2vec_model.get_embeddings()
 
-embeddings = word2vec_model.get_embeddings()
-#####################################################################
+    X_train, Y_train = generate_sequence_data(processed_data_line, word_to_idx, MAX_LEN)
+    model = Transformer(
+        vocab_size=len(word_to_idx),
+        embed_dim=EMBED_DIM,
+        num_heads=NUM_HEADS,
+        ff_dim=FF_DIM,
+        num_layers=NUM_LAYERS,
+        max_len=MAX_LEN,
+        embedding_weight=embeddings,
+        use_gpu=True,
+    )
 
-max_len = 320
+    idx_to_word = {idx: w for w, idx in word_to_idx.items()}
 
-X_train, Y_train = generate_sequence_data(processed_data_line, word_to_idx, max_len)
-model = Transformer(vocab_size=len(word_to_idx), embed_dim=256, num_heads=8, ff_dim=1024, num_layers=3,
-                    max_len=max_len, embedding_weight=embeddings, use_gpu=True)
+    sample_prompts = []
+    for sent in processed_data_line[:3]:
+        ids = [word_to_idx.get(w, word_to_idx["<UNKNOWN>"]) for w, _t in sent]
+        sample_prompts.append(ids[: min(12, len(ids) - 1)])
 
-# Build reverse map for qualitative samples
-idx_to_word = {idx: w for w, idx in word_to_idx.items()}
+    train_transformer(
+        model,
+        X_train,
+        Y_train,
+        learning_rate=LEARNING_RATE,
+        nepoch=NEPOCH,
+        evaluation_loss_after=EVALUATION_LOSS_AFTER,
+        batch_size=BATCH_SIZE,
+        print_every=PRINT_EVERY,
+        clip_grad_norm=CLIP_GRAD_NORM,
+        idx_to_word=idx_to_word,
+        sample_prompts=sample_prompts,
+        topk=TOPK,
+    )
 
-# Build a few sample prompts (as lists of indices) from the training data
-sample_prompts = []
-for sent in processed_data_line[:3]:
-    ids = [word_to_idx.get(w, word_to_idx['<UNKNOWN>']) for w, t in sent]
-    # take a short prefix to keep compute light
-    sample_prompts.append(ids[: min(12, len(ids)-1)])
+    model.save(SAVE_PATH)
+    print(f"Saved transformer weights: {SAVE_PATH}")
 
-train_transformer(
-    model,
-    X_train,
-    Y_train,
-    learning_rate=0.0001,
-    nepoch=10,
-    evaluation_loss_after=1,
-    batch_size=16,
-    print_every=10,
-    clip_grad_norm=1.0,
-    idx_to_word=idx_to_word,
-    sample_prompts=sample_prompts,
-    topk=5,
-)
 
-model.save(os.path.join(REPO_ROOT, 'transformer_model.pth'))
+if __name__ == "__main__":
+    main()
