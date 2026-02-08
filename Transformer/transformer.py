@@ -549,7 +549,17 @@ class Transformer:
         return loss, dlogits
 
     def save(self, filename):
-        weights = {
+        state = {
+            'config': {
+                'vocab_size': int(self.vocab_size),
+                'embed_dim': int(self.embed_dim),
+                'num_heads': int(self.num_heads),
+                'ff_dim': int(self.ff_dim),
+                'num_layers': int(self.num_layers),
+                'max_len': int(self.max_len),
+                'dropout_p': float(self.dropout_p),
+                'use_adam': bool(self.use_adam),
+            },
             'We': self.We,
             'Wq': self.Wq,
             'Wk': self.Wk,
@@ -567,9 +577,87 @@ class Transformer:
             'ln2_beta': self.ln2_beta,
         }
         if self.use_gpu:
-            weights = {k: v.get() for k, v in weights.items()}
+            state = {k: (v.get() if k != 'config' else v) for k, v in state.items()}
         with open(filename, 'wb') as f:
-            pickle.dump(weights, f)
+            pickle.dump(state, f)
+
+    def load_weights(self, filename):
+        with open(filename, 'rb') as f:
+            state = pickle.load(f)
+        if not isinstance(state, dict):
+            raise ValueError("Invalid checkpoint format (expected dict).")
+        weights = {k: v for k, v in state.items() if k != 'config'}
+
+        npb = self.np
+        for k in (
+            'We',
+            'Wq',
+            'Wk',
+            'Wv',
+            'Wo',
+            'W1',
+            'W2',
+            'b1',
+            'b2',
+            'W_vocab',
+            'b_vocab',
+            'ln1_gamma',
+            'ln1_beta',
+            'ln2_gamma',
+            'ln2_beta',
+        ):
+            if k not in weights:
+                continue
+            setattr(self, k, npb.asarray(weights[k]))
+        return self
+
+    @classmethod
+    def load(
+        cls,
+        filename,
+        *,
+        num_heads=8,
+        max_len=320,
+        use_gpu=False,
+        dropout_p=0.1,
+        use_adam=True,
+        enable_tf32=True,
+    ):
+        with open(filename, 'rb') as f:
+            state = pickle.load(f)
+        if not isinstance(state, dict):
+            raise ValueError("Invalid checkpoint format (expected dict).")
+
+        config = state.get('config') if isinstance(state.get('config'), dict) else {}
+        weights = {k: v for k, v in state.items() if k != 'config'}
+        if 'We' not in weights or 'Wq' not in weights or 'W1' not in weights:
+            raise KeyError("Checkpoint missing required keys (expected at least We, Wq, W1).")
+
+        vocab_size = int(config.get('vocab_size', weights['We'].shape[0]))
+        embed_dim = int(config.get('embed_dim', weights['We'].shape[1]))
+        num_layers = int(config.get('num_layers', weights['Wq'].shape[0]))
+        ff_dim = int(config.get('ff_dim', weights['W1'].shape[2]))
+
+        num_heads = int(config.get('num_heads', num_heads))
+        max_len = int(config.get('max_len', max_len))
+        dropout_p = float(config.get('dropout_p', dropout_p))
+        use_adam = bool(config.get('use_adam', use_adam))
+
+        model = cls(
+            vocab_size=vocab_size,
+            embed_dim=embed_dim,
+            num_heads=num_heads,
+            ff_dim=ff_dim,
+            num_layers=num_layers,
+            max_len=max_len,
+            embedding_weight=None,
+            use_gpu=use_gpu,
+            dropout_p=dropout_p,
+            use_adam=use_adam,
+            enable_tf32=enable_tf32,
+        )
+        model.load_weights(filename)
+        return model
 
 
 def pad_sequence(sequence, max_len, pad_token=0, lib=np):

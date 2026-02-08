@@ -42,6 +42,9 @@ EVALUATION_LOSS_AFTER = 1
 PRINT_EVERY = 10
 CLIP_GRAD_NORM = 1.0
 TOPK = 5
+TOPP = 0.9
+TEMPERATURE = 1.0
+SAMPLE_MAX_NEW_TOKENS = 20
 
 
 def generate_sequence_data(processed_data, word_to_index, max_len):
@@ -120,6 +123,9 @@ def main():
         idx_to_word=idx_to_word,
         sample_prompts=sample_prompts,
         topk=TOPK,
+        topp=TOPP,
+        temperature=TEMPERATURE,
+        sample_max_new_tokens=SAMPLE_MAX_NEW_TOKENS,
     )
 
     model.save(SAVE_PATH)

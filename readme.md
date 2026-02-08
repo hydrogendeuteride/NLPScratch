@@ -50,18 +50,45 @@ The models implemented are:
   - `train.py`
   - `utils.py`
 
-## How To Run (no import errors)
-- Always run from the repo root and use module mode so imports resolve:
-  - SkipGram training (PyTorch):
-    - `python -m SkipGram.torch_skipgram`
-  - Transformer training (NumPy/CuPy):
-    - `python -m Transformer.transformer_train`
+## How To Run
 
-- Alternatively, run the scripts directly from anywhere by setting `PYTHONPATH` to the repo root:
-  - `PYTHONPATH=. python SkipGram/torch_skipgram.py`
-  - `PYTHONPATH=. python Transformer/transformer_train.py`
+### HMM
+```bash
+cd HMM
+python hmm.py HMM_addingone_model.dat --input_file ../dataset/tagged_test.txt --output_file out.txt  # Viterbi
+python test.py                         # evaluation
+python unsupervised.py                 # Baum-Welch unsupervised learning (not completed)
+python match.py                        # Baum-Welch evaluation
+```
 
-The training scripts were updated to resolve dataset/weight paths relative to the repository root and to add the root to `sys.path` automatically. This avoids `ModuleNotFoundError: No module named 'utils'` when not launched from a specific directory.
+### RNN
+```bash
+cd RNN
+python RNN_train.py   # learning
+python RNN_test.py    # sample test
+python RNN_eval.py    # tagged_test.txt
+```
+
+### LSTM
+```bash
+cd LSTM
+python LSTM_train.py   # learning
+python LSTM_test.py    # sample input test
+python LSTM_eval.py    # tagged_test.txt
+```
+
+### SkipGram
+```bash
+python -m SkipGram.torch_skipgram   # PyTorch Word2Vec(repo root)
+cd SkipGram && python word2vec_train.py   # NumPy Word2Vec
+```
+
+### Transformer
+```bash
+python -m Transformer.transformer_train       # word-level
+python -m Transformer.transformer_train_bpe   # BPE 
+python -m Transformer.transformer_generate    # generation
+```
 
 ## Models Implemented
 ### HMM

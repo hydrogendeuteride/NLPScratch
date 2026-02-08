@@ -2,6 +2,8 @@ import time
 from tqdm import tqdm
 import numpy as np
 
+from utils.decoding import generate_transformer_ids, ids_to_text, to_cpu_np
+
 
 def train_with_sgd(model, x_train, y_train, learning_rate=0.01, nepoch=100, evaluation_loss_after=5):
     losses = []
@@ -28,7 +30,8 @@ def train_with_sgd(model, x_train, y_train, learning_rate=0.01, nepoch=100, eval
 
 
 def train_transformer(model, x_train, y_train, learning_rate=0.01, nepoch=100, evaluation_loss_after=5, batch_size=32,
-                      print_every=1, clip_grad_norm=None, idx_to_word=None, sample_prompts=None, topk=5):
+                      print_every=1, clip_grad_norm=None, idx_to_word=None, sample_prompts=None, topk=5,
+                      topp=1.0, temperature=1.0, sample_max_new_tokens=0):
     """
     Vectorized mini-batch training loop for the numpy/cupy Transformer.
     - Uses the model's backend (`model.np`) everywhere to avoid CPU/GPU mixing.
@@ -143,22 +146,51 @@ def train_transformer(model, x_train, y_train, learning_rate=0.01, nepoch=100, e
         if idx_to_word is not None and sample_prompts:
             try:
                 print("\nSamples:")
+                was_training = getattr(model, "training", True)
+                model.eval()
+
+                stop_id = None
+                for tok in ("<END>", "<EOS>"):
+                    for i, w in idx_to_word.items():
+                        if w == tok:
+                            stop_id = int(i)
+                            break
+                    if stop_id is not None:
+                        break
+
                 for prompt in sample_prompts:
-                    seq = npb.array(prompt, dtype=npb.int32)[None, :]
-                    H, _ = model.forward(seq, return_hidden_only=True)
-                    next_logits = H[0, -1] @ model.W_vocab + model.b_vocab
-                    probs = npb.exp(next_logits - next_logits.max())
-                    probs /= probs.sum()
-                    # Bring to CPU for argsort display if needed
-                    probs_cpu = probs
-                    if hasattr(npb, 'asnumpy'):
-                        try:
-                            probs_cpu = npb.asnumpy(probs)
-                        except Exception:
-                            pass
-                    top_idx = np.array(probs_cpu).argsort()[-topk:][::-1]
-                    words = [idx_to_word.get(int(i), '<UNK>') for i in top_idx]
-                    print('  ->', ' '.join(words))
+                    if sample_max_new_tokens and int(sample_max_new_tokens) > 0:
+                        out_ids = generate_transformer_ids(
+                            model,
+                            prompt,
+                            max_new_tokens=sample_max_new_tokens,
+                            topk=topk,
+                            topp=topp,
+                            temperature=temperature,
+                            stop_id=stop_id,
+                            pad_id=0,
+                        )
+                        print("  ->", ids_to_text(out_ids, idx_to_word))
+                    else:
+                        # Back-compat: show top-k candidates for the next token.
+                        seq = npb.array(prompt, dtype=npb.int32)[None, :]
+                        H, _ = model.forward(seq, return_hidden_only=True)
+                        next_logits = H[0, -1] @ model.W_vocab + model.b_vocab
+                        next_logits_cpu = to_cpu_np(next_logits, npb)
+                        logits = np.asarray(next_logits_cpu, dtype=np.float64)
+                        logits = logits - float(np.max(logits))
+                        probs = np.exp(logits)
+                        probs_sum = float(np.sum(probs))
+                        if probs_sum > 0:
+                            probs = probs / probs_sum
+                        if 0 < probs.size:
+                            probs[0] = 0.0
+                        top_idx = np.asarray(probs).argsort()[-int(topk) :][::-1]
+                        words = [idx_to_word.get(int(i), "<UNK>") for i in top_idx]
+                        print("  ->", " ".join(words))
+
+                if was_training:
+                    model.train()
             except Exception as e:
                 print('Sampling error:', e)
 
